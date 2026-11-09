@@ -40,36 +40,20 @@
           }
         },
         "1.0.1": {
-          "changelog": "新图标与移动端适配。",
+          "changelog": "应用图标重绘、Web UI 响应式适配，修复飞牛 App 内请求来源校验。",
           "packages": {
             "x86": {
-              "sha256": "28d8a89247fa6a0280369b5645eaaa8acbc494046bde83e773fecc99e1152b22",
-              "size": 3655536,
+              "sha256": "61f2a94bf0113d8b79d08f9eb84f40c05df1d3f022b8aab0b84b4b4ea6d64f52",
+              "size": 3665821,
               "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.1/dynv6_1.0.1_x86.fpk"
             },
             "arm": {
-              "sha256": "ea3374c8bbf6d012df153c9163b0a60f7340c629c465413d134bb41aa987a3ab",
-              "size": 3335829,
+              "sha256": "05871cf839930980ab7dc2c73dea0326d68d726f223209c40d62096fdebada39",
+              "size": 3309333,
               "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.1/dynv6_1.0.1_arm.fpk"
             }
           },
-          "updated_at": "2026-11-09T15:42:18+00:00"
-        },
-        "1.0.2": {
-          "changelog": "修复飞牛 App 内打开时请求被来源校验拦截的问题。",
-          "packages": {
-            "x86": {
-              "sha256": "d8d0972832e112ebb970310c792c75cd5b7296ff05b1d8abf975bd3a4247c91c",
-              "size": 3655548,
-              "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.2/dynv6_1.0.2_x86.fpk"
-            },
-            "arm": {
-              "sha256": "ef966f0bd07db1971d74dfb2267b2f859f33867f902aad8bad31a7fe93221735",
-              "size": 3335998,
-              "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.2/dynv6_1.0.2_arm.fpk"
-            }
-          },
-          "updated_at": "2026-11-09T16:01:40+00:00"
+          "updated_at": "2026-11-10T00:02:33+08:00"
         }
       }
     }
