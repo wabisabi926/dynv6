@@ -25,17 +25,17 @@
       "releases": {
         "1.0.0": {
           "changelog": "首个公开发布版本，包含 DDNS 自动更新、证书签发续期与证书分发完整链路。",
-          "updated_at": "2026-11-09T21:41:26+08:00",
+          "updated_at": "2026-11-09T13:43:37+00:00",
           "packages": {
             "x86": {
               "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.0/dynv6_1.0.0_x86.fpk",
-              "sha256": "8a40831a53f3774827255da7cff704e87f3304d3cd091d52b611a90920a0ef07",
-              "size": 3839788
+              "sha256": "832eb66af22a9dcf2aa99bac29e87cd78157caf680296e4259f4d422ad72db11",
+              "size": 3830337
             },
             "arm": {
               "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.0/dynv6_1.0.0_arm.fpk",
-              "sha256": "9de401f1e835da01637913c6c0c7a0a039b777bc4fd28f3179236a46de58cb8c",
-              "size": 3483542
+              "sha256": "c448fd57c28808ea2770b13cd45cafa4698973693871e0be33237e03826fdf39",
+              "size": 3511195
             }
           }
         }
