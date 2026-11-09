@@ -1,18 +1,12 @@
 package main
 
 import (
-	"bufio"
-	"context"
-	"fmt"
-	"io"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -133,100 +127,11 @@ func copyFile(src, dst string, mode os.FileMode) error {
 	return atomicWrite(dst, data, mode)
 }
 
-// runCmd 执行命令并实时逐行写日志；敏感值不会写入日志
-func (a *App) runCmd(name string, args []string, extraEnv []string, timeout time.Duration, secrets []string, logf func(string, ...any)) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = a.childEnv(extraEnv)
-	cmd.WaitDelay = 5 * time.Second
-	setProcessGroup(cmd)
-	// CommandContext 默认只杀主进程，这里改为杀整个进程组，避免 curl 等子进程残留。
-	cmd.Cancel = func() error {
-		killProcessTree(cmd)
-		return nil
-	}
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return "", err
-	}
-	if logf != nil {
-		logf("$ %s", maskSecrets(strings.Join(append([]string{name}, args...), " "), secrets))
-	}
-	if a.wasCanceled() {
-		return "", fmt.Errorf("任务已取消")
-	}
-	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("%s 启动失败: %w", name, err)
-	}
-	a.registerCmd(cmd)
-	defer a.unregisterCmd(cmd)
-
-	var mu sync.Mutex
-	var buf strings.Builder
-	read := func(r io.Reader) {
-		sc := bufio.NewScanner(r)
-		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-		for sc.Scan() {
-			line := maskSecrets(sc.Text(), secrets)
-			mu.Lock()
-			if buf.Len() < 200_000 {
-				buf.WriteString(line)
-				buf.WriteByte('\n')
-			}
-			mu.Unlock()
-			if logf != nil {
-				logf("%s", line)
-			}
-		}
-	}
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() { defer wg.Done(); read(stdout) }()
-	go func() { defer wg.Done(); read(stderr) }()
-	waitErr := cmd.Wait()
-	wg.Wait()
-	out := strings.TrimRight(buf.String(), "\n")
-	if a.wasCanceled() {
-		return out, fmt.Errorf("任务已取消")
-	}
-	if ctx.Err() == context.DeadlineExceeded {
-		return out, fmt.Errorf("%s 超时（%s）", name, timeout)
-	}
-	if waitErr != nil {
-		return out, fmt.Errorf("%s 执行失败: %w", name, waitErr)
-	}
-	return out, nil
-}
-
 func maskSecrets(s string, secrets []string) string {
 	for _, v := range secrets {
 		if v != "" {
 			s = strings.ReplaceAll(s, v, "***")
 		}
-	}
-	return s
-}
-
-// summarizeCmdOutput 取最后几行非空输出，作为任务卡片的失败摘要
-func summarizeCmdOutput(out string) string {
-	lines := strings.Split(out, "\n")
-	var keep []string
-	for i := len(lines) - 1; i >= 0 && len(keep) < 3; i-- {
-		s := strings.TrimSpace(lines[i])
-		if s == "" {
-			continue
-		}
-		keep = append([]string{s}, keep...)
-	}
-	s := strings.Join(keep, " | ")
-	if len([]rune(s)) > 500 {
-		s = string([]rune(s)[:500]) + "…"
 	}
 	return s
 }

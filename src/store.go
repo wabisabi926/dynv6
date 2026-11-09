@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
@@ -43,7 +42,6 @@ type Task struct {
 
 type App struct {
 	paths        Paths
-	tools        Tools
 	demo         bool
 	cfgMu        sync.RWMutex
 	cfg          Config
@@ -68,7 +66,6 @@ type App struct {
 	current      string
 	laneBusy     map[string]bool
 	cmdMu        sync.Mutex
-	currentCmd   *exec.Cmd
 	cancelReq    bool
 	notifyMu     sync.Mutex
 	lastNotify   map[string]time.Time
@@ -80,7 +77,6 @@ type App struct {
 func newApp(p Paths, demo bool) *App {
 	a := &App{
 		paths:      p,
-		tools:      resolveTools(),
 		demo:       demo,
 		logs:       make([]string, 0, 600),
 		tasks:      make([]Task, 0, 100),
@@ -252,38 +248,27 @@ func (a *App) setStage(stage string) {
 	}
 }
 
-func (a *App) registerCmd(cmd *exec.Cmd) {
-	a.cmdMu.Lock()
-	a.currentCmd = cmd
-	a.cmdMu.Unlock()
-}
-
-func (a *App) unregisterCmd(cmd *exec.Cmd) {
-	a.cmdMu.Lock()
-	if a.currentCmd == cmd {
-		a.currentCmd = nil
-	}
-	a.cmdMu.Unlock()
-}
-
 func (a *App) wasCanceled() bool {
 	a.cmdMu.Lock()
 	defer a.cmdMu.Unlock()
 	return a.cancelReq
 }
 
-// cancelCurrent 标记取消（证书签发为内置 HTTP 流程，会在阶段间尽快退出）
+// cancelCurrent 标记取消；证书签发为内置 HTTP 流程，会在阶段间尽快退出
 func (a *App) cancelCurrent() bool {
 	a.cmdMu.Lock()
-	cmd := a.currentCmd
+	defer a.cmdMu.Unlock()
 	a.cancelReq = true
-	a.cmdMu.Unlock()
-	if cmd == nil || cmd.Process == nil {
-		return false
-	}
-	a.log("用户请求取消任务，正在终止进程 %d", cmd.Process.Pid)
-	killProcessTree(cmd)
 	return true
+}
+
+// capabilities 列出当前版本支持的功能（证书签发与转换均为内置实现）
+func (a *App) capabilities() map[string]bool {
+	return map[string]bool{
+		"ddns":    true,
+		"issue":   true,
+		"convert": true,
+	}
 }
 
 // startTask 按 lane 串行：DDNS 与证书任务互不阻塞
