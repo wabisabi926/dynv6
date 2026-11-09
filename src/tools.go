@@ -19,8 +19,15 @@ type Tools struct {
 func (t Tools) HasShell() bool   { return t.Sh != "" }
 func (t Tools) HasOpenSSL() bool { return t.OpenSSL != "" }
 
+func toolName(p string) string {
+	if p == "" {
+		return "未找到"
+	}
+	return p
+}
+
 func resolveTools() Tools {
-	t := Tools{Sh: lookPath("sh"), OpenSSL: lookPath("openssl")}
+	t := Tools{Sh: resolveTool("sh", os.Getenv("DYNV6_SH"), shellCandidates()), OpenSSL: resolveTool("openssl", os.Getenv("DYNV6_OPENSSL"), opensslCandidates())}
 	if runtime.GOOS == "windows" {
 		for _, dir := range windowsToolDirs() {
 			if t.Sh == "" {
@@ -57,6 +64,44 @@ func lookPath(name string) string {
 		return ""
 	}
 	return p
+}
+
+// resolveTool 依次尝试：显式环境变量 → PATH → 常见绝对路径。
+// 飞牛等环境可能只给 Go 进程极简 PATH，绝对路径兜底可以避免“找不到 sh”。
+func resolveTool(name, override string, candidates []string) string {
+	if p := strings.TrimSpace(override); p != "" {
+		if fileExists(p) {
+			return p
+		}
+	}
+	if p := lookPath(name); p != "" {
+		return p
+	}
+	for _, p := range candidates {
+		if isExecutableFile(p) {
+			return p
+		}
+	}
+	return ""
+}
+
+func shellCandidates() []string {
+	return []string{"/bin/sh", "/usr/bin/sh", "/usr/local/bin/sh", "/sbin/sh", "/bin/bash", "/usr/bin/bash"}
+}
+
+func opensslCandidates() []string {
+	return []string{"/usr/bin/openssl", "/usr/local/bin/openssl", "/bin/openssl", "/usr/local/ssl/bin/openssl", "/opt/homebrew/bin/openssl"}
+}
+
+func isExecutableFile(p string) bool {
+	st, err := os.Stat(p)
+	if err != nil || st.IsDir() {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		return true
+	}
+	return st.Mode()&0111 != 0
 }
 
 func windowsToolDirs() []string {

@@ -308,7 +308,10 @@ func main() {
 	}
 	a.loadState()
 	a.log("dynv6 %s 启动，配置=%s 数据=%s", Version, p.Config, p.Var)
-	a.log("外部命令：sh=%v openssl=%v", a.tools.HasShell(), a.tools.HasOpenSSL())
+	a.log("外部命令：sh=%s openssl=%s", toolName(a.tools.Sh), toolName(a.tools.OpenSSL))
+	if !a.tools.HasShell() {
+		a.log("未找到 sh（PATH=%s）；证书签发需要它，可设置 DYNV6_SH=/bin/sh 手动指定", os.Getenv("PATH"))
+	}
 	if hint := vpnInterfaceHint(); hint != "" {
 		a.log("网络提示：检测到 %s；如果启用了 VPN/代理/出口节点，IP 探测可能得到出口 IP，而不是家庭宽带 IP", hint)
 	}

@@ -2,6 +2,10 @@
 # dynv6 服务管理：start / stop / restart / status
 set -u
 
+# 飞牛启动环境可能只给精简 PATH，补齐标准目录，保证 sh/openssl/curl 能被找到
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+export PATH
+
 APP="${TRIM_APPDEST:-/var/apps/dynv6/target}"
 VAR="${TRIM_PKGVAR:-$APP/var}"
 ETC="${TRIM_PKGETC:-$APP/etc}"

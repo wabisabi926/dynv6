@@ -84,7 +84,7 @@ label.check.inline{display:inline-flex;margin:0}
 .msg.ok{color:var(--green)}
 .msg.err{color:var(--red)}
 .notice{background:var(--amber-soft);color:var(--amber);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px}
-.hidden{display:none}
+.hidden{display:none!important}
 .logs{background:#fbfcfe;border:1px solid var(--line);border-radius:10px;padding:14px;height:460px;overflow:auto;font:12px/1.6 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all}
 .target{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;background:#fcfdff}
 .target-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
@@ -96,7 +96,7 @@ label.check.inline{display:inline-flex;margin:0}
 .help p{color:var(--text)}
 .help a{color:var(--blue)}
 .auth-gate{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(160deg,#eef4ff 0%,#f8fbff 55%,#fff 100%)}
-.auth-gate.hidden{display:none}
+.auth-gate.hidden{display:none!important}
 .auth-card{width:100%;max-width:420px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:28px;box-shadow:0 18px 50px rgba(37,99,235,.14);text-align:center}
 .auth-card .logo{width:64px;height:64px;margin-bottom:10px}
 .auth-card h1{font-size:22px;margin:0 0 6px}
