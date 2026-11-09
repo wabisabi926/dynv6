@@ -9,7 +9,7 @@ import (
 
 func newLocalTestApp() *App {
 	return &App{
-		paths:      Paths{DevPort: "6010"},
+		paths:      Paths{DevPort: "8092"},
 		localAuth:  true,
 		localToken: "test-token-0123456789abcdef",
 		laneBusy:   map[string]bool{},
@@ -20,7 +20,7 @@ func newLocalTestApp() *App {
 // 服务模式（Docker / 反向代理）没有本地令牌，除登录相关接口外必须要求管理员会话。
 func TestServerModeRequiresLogin(t *testing.T) {
 	a := &App{
-		paths:      Paths{Listen: "0.0.0.0:6010", Var: t.TempDir()},
+		paths:      Paths{Listen: "0.0.0.0:8092", Var: t.TempDir()},
 		laneBusy:   map[string]bool{},
 		lastNotify: map[string]time.Time{},
 	}
@@ -49,11 +49,11 @@ func TestServerModeRequiresLogin(t *testing.T) {
 
 // 同时设置 DYNV6_LISTEN 与 DYNV6_DEV_PORT 时，服务模式优先，不能误启用本地令牌。
 func TestListenTakesPrecedenceOverDevPort(t *testing.T) {
-	t.Setenv("DYNV6_LISTEN", "0.0.0.0:6010")
+	t.Setenv("DYNV6_LISTEN", "0.0.0.0:8092")
 	t.Setenv("DYNV6_DEV_PORT", "6011")
 	t.Setenv("TRIM_APPDEST", "")
 	p := detectPaths()
-	if p.Listen != "0.0.0.0:6010" || p.DevPort != "" {
+	if p.Listen != "0.0.0.0:8092" || p.DevPort != "" {
 		t.Fatalf("服务模式应优先，得到 Listen=%q DevPort=%q", p.Listen, p.DevPort)
 	}
 }
@@ -65,8 +65,8 @@ func TestFnosUsesServicePort(t *testing.T) {
 	t.Setenv("DYNV6_DOCKER", "")
 	t.Setenv("TRIM_APPDEST", t.TempDir())
 	p := detectPaths()
-	if p.Listen != "0.0.0.0:6010" || p.DevPort != "" {
-		t.Fatalf("飞牛应使用 6010 端口模式，得到 Listen=%q DevPort=%q", p.Listen, p.DevPort)
+	if p.Listen != "0.0.0.0:8092" || p.DevPort != "" {
+		t.Fatalf("飞牛应使用 8092 端口模式，得到 Listen=%q DevPort=%q", p.Listen, p.DevPort)
 	}
 }
 
@@ -74,14 +74,14 @@ func TestLocalAuthGate(t *testing.T) {
 	a := newLocalTestApp()
 	h := a.handler()
 
-	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:6010/api/status", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8092/api/status", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("无令牌应 403，得到 %d", rec.Code)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "http://127.0.0.1:6010/api/status", nil)
+	req = httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8092/api/status", nil)
 	req.AddCookie(&http.Cookie{Name: localTokenCookie, Value: a.localToken})
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -101,7 +101,7 @@ func TestLocalAuthGate(t *testing.T) {
 func TestLocalTokenRedirect(t *testing.T) {
 	a := newLocalTestApp()
 	h := a.handler()
-	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:6010/?token="+a.localToken, nil)
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8092/?token="+a.localToken, nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusSeeOther {
@@ -115,7 +115,7 @@ func TestLocalTokenRedirect(t *testing.T) {
 func TestCSRFGate(t *testing.T) {
 	a := newLocalTestApp()
 	h := a.handler()
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:6010/api/config", nil)
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8092/api/config", nil)
 	req.AddCookie(&http.Cookie{Name: localTokenCookie, Value: a.localToken})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)

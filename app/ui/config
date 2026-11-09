@@ -5,7 +5,7 @@
       "icon": "images/ICON_{0}.PNG",
       "type": "url",
       "protocol": "",
-      "port": "6010",
+      "port": "8092",
       "url": "/",
       "control": {
         "fullUrlPerm": "hidden",
