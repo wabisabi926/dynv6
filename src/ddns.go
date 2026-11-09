@@ -286,7 +286,7 @@ func (a *App) runDDNS(force bool) error {
 		a.log("公网 IP/域名/Token 未变化（IPv4=%s IPv6=%s），跳过 DDNS 更新", ipv4, ipv6)
 		a.setState(func(s *State) {
 			s.LastDDNSAt = nowISO()
-			s.LastDDNSResult = "IP 未变化，无需更新" + joinWarning(warning)
+			s.LastDDNSResult = "IP 未变化，无需更新"
 			s.LastDDNSDomain = c.Domain
 			s.LastDDNSTokenHash = tokenFP
 		})
@@ -332,7 +332,7 @@ func (a *App) runDDNS(force bool) error {
 	a.log("DDNS 更新成功 zone=%s ipv4=%s ipv6=%s 响应=%s%s", c.Domain, ipv4, ipv6, maskSecrets(text, a.secrets(c)), joinWarning(warning))
 	a.setState(func(s *State) {
 		s.LastDDNSAt = nowISO()
-		s.LastDDNSResult = "更新成功" + joinWarning(warning)
+		s.LastDDNSResult = "更新成功"
 		s.LastDDNSDomain = c.Domain
 		s.LastDDNSTokenHash = tokenFP
 		if ipv4 != "" {
@@ -342,6 +342,6 @@ func (a *App) runDDNS(force bool) error {
 			s.LastIPv6 = ipv6
 		}
 	})
-	a.notify("DDNS 更新成功", fmt.Sprintf("域名：%s\nIPv4：%s\nIPv6：%s%s", c.Domain, ipv4, ipv6, joinWarning(warning)))
+	a.notify("DDNS 更新成功", fmt.Sprintf("域名：%s\nIPv4：%s\nIPv6：%s", c.Domain, ipv4, ipv6))
 	return nil
 }
