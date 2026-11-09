@@ -149,8 +149,8 @@ func dedupePaths(in []string) []string {
 func (a *App) capabilities() map[string]bool {
 	return map[string]bool{
 		"ddns":    true,
-		"issue":   a.tools.HasShell() && a.tools.HasOpenSSL(),
-		"convert": a.tools.HasOpenSSL(),
+		"issue":   true,
+		"convert": true,
 	}
 }
 

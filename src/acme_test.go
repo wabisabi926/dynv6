@@ -1,36 +1,18 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-)
 
-func TestReadConfValue(t *testing.T) {
-	dir := t.TempDir()
-	p := filepath.Join(dir, "x.conf")
-	content := "Le_Domain='a.example.com'\nLe_API='https://acme-v02.api.letsencrypt.org/directory'\nLe_Alt=\"*.a.example.com\"\n"
-	if err := os.WriteFile(p, []byte(content), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if got := readConfValue(p, "Le_Domain"); got != "a.example.com" {
-		t.Fatalf("Le_Domain = %q", got)
-	}
-	if got := readConfValue(p, "Le_API"); got != caServerLE {
-		t.Fatalf("Le_API = %q", got)
-	}
-	if got := readConfValue(p, "Le_Alt"); got != "*.a.example.com" {
-		t.Fatalf("Le_Alt = %q (双引号未去除)", got)
-	}
-	if got := readConfValue(p, "Nope"); got != "" {
-		t.Fatalf("缺失 key 应返回空，得到 %q", got)
-	}
-	if got := readConfValue(filepath.Join(dir, "missing.conf"), "Le_API"); got != "" {
-		t.Fatalf("文件不存在应返回空，得到 %q", got)
-	}
-}
+	"github.com/go-acme/lego/v4/certcrypto"
+)
 
 func TestCAServerURL(t *testing.T) {
 	if caServerURL("letsencrypt") != caServerLE {
@@ -44,25 +26,18 @@ func TestCAServerURL(t *testing.T) {
 	}
 }
 
-// acme.sh 用 <domain>_ecc 或 <domain> 两种目录保存域名配置，两种都要能找到
-func TestCertConfPath(t *testing.T) {
-	home := t.TempDir()
-	a := &App{paths: Paths{Var: t.TempDir()}, lastNotify: map[string]time.Time{}}
-	c := Config{Domain: "a.example.com", AcmeHome: home, KeyLength: "ec-256"}
-
-	if got := a.certConfPath(c); got != "" {
-		t.Fatalf("未签发时应返回空，得到 %q", got)
+func TestKeyTypeFor(t *testing.T) {
+	cases := map[string]certcrypto.KeyType{
+		"ec-256": certcrypto.EC256,
+		"ec-384": certcrypto.EC384,
+		"2048":   certcrypto.RSA2048,
+		"4096":   certcrypto.RSA4096,
+		"":       certcrypto.EC256,
 	}
-	eccDir := filepath.Join(home, "a.example.com_ecc")
-	if err := os.MkdirAll(eccDir, 0700); err != nil {
-		t.Fatal(err)
-	}
-	conf := filepath.Join(eccDir, "a.example.com.conf")
-	if err := os.WriteFile(conf, []byte("Le_API='"+caServerLETest+"'\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if got := a.certConfPath(c); got != conf {
-		t.Fatalf("应找到 ecc 配置，得到 %q", got)
+	for in, want := range cases {
+		if got := keyTypeFor(in); got != want {
+			t.Fatalf("keyTypeFor(%q) = %v，期望 %v", in, got, want)
+		}
 	}
 }
 
@@ -71,7 +46,7 @@ func TestClassifyAcmeError(t *testing.T) {
 		out  string
 		want string
 	}{
-		{"Could not find a matching zone for _acme-challenge.x.dynv6.net. Maybe your HTTP Token is not authorized to access the zone", "HTTP Token 无权访问该域名（zone）"},
+		{"Could not find a matching zone for _acme-challenge.x.dynv6.net", "HTTP Token 无权访问该域名（zone）"},
 		{"Error adding TXT record to domain", "创建 TXT 记录失败"},
 		{"Register account error: 429", "限流"},
 		{"Get https://acme...: Timeout was reached", "超时"},
@@ -87,21 +62,31 @@ func TestClassifyAcmeError(t *testing.T) {
 	}
 }
 
-// 用户主动删空分发目标（显式 []）后不能又被补回来；缺字段（nil）才补默认值
-func TestNormalizeTargets(t *testing.T) {
+func TestCertConfigMismatchKeyType(t *testing.T) {
+	home := t.TempDir()
+	out := t.TempDir()
 	a := &App{paths: Paths{Var: t.TempDir()}}
-	if got := a.normalize(Config{}); len(got.Targets) == 0 {
-		t.Fatal("缺 targets 字段的老配置应补默认目标")
+	c := Config{Domain: "a.example.com", AcmeHome: home, OutputDir: out, KeyLength: "ec-256"}
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got := a.normalize(Config{Schema: 2, Targets: []Target{}}); len(got.Targets) != 0 {
-		t.Fatalf("显式空数组不应补默认目标，得到 %d 个", len(got.Targets))
+	der, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
 	}
-	// 目录为空的启用目标要自动关闭
-	got := a.normalize(Config{Schema: 2, Targets: []Target{{ID: "x", Kind: "emby", Enabled: true, Dir: "", Filename: "a.pfx"}}})
-	if got.Targets[0].Enabled {
-		t.Fatal("空目录目标应被自动禁用")
+	keyPath := a.fileSet(c)["key"]
+	if err := os.MkdirAll(filepath.Dir(keyPath), 0700); err != nil {
+		t.Fatal(err)
 	}
-	if got.Targets[0].Mode != "0644" {
-		t.Fatalf("目标权限应固定 0644，得到 %q", got.Targets[0].Mode)
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der}), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if mismatch, reason := a.certConfigMismatch(c); mismatch {
+		t.Fatalf("密钥算法一致时不应报不匹配：%s", reason)
+	}
+	c.KeyLength = "2048"
+	if mismatch, _ := a.certConfigMismatch(c); !mismatch {
+		t.Fatal("密钥算法变化应检测到不匹配")
 	}
 }

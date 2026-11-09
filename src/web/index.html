@@ -131,14 +131,14 @@
         <div class="grid">
           <label>证书输出目录<div class="path-row"><input data-k="output_dir"><button type="button" class="btn ghost" onclick="openDirPicker(this.previousElementSibling)">选择</button></div><small class="field-hint">主输出 0600；分发目标中 PFX/P12 与证书为 0644，PEM 私钥固定 0600。</small></label>
         </div>
-        <p class="hint">备份目录固定在应用数据目录，acme.sh 工作目录固定为 <code>${APPDATA}/acme</code>；主输出 0600、PFX/P12 与证书 0644、PEM 私钥 0600。上面三项时间参数默认 5 分钟 / 12 小时 / 30 天，一般无需修改。</p>
+        <p class="hint">备份目录固定在应用数据目录，ACME 数据目录固定为 <code>${APPDATA}/acme</code>；主输出 0600、PFX/P12 与证书 0644、PEM 私钥 0600。上面三项时间参数默认 5 分钟 / 12 小时 / 30 天，一般无需修改。</p>
 
         <h2>Emby / Plex 证书密码</h2>
         <div class="grid">
           <label><span class="label-head">PFX 密码（Emby） <span id="pfx_password-state" class="field-state">未设置</span></span><div class="secret-row"><input type="password" data-k="pfx_password" autocomplete="new-password" placeholder="未设置"><button type="button" id="pfx_password-clear" class="btn ghost secret-clear hidden" onclick="clearSecret('pfx_password')">清除</button></div></label>
           <label><span class="label-head">P12 密码（Plex） <span id="p12_password-state" class="field-state">未设置</span></span><div class="secret-row"><input type="password" data-k="p12_password" autocomplete="new-password" placeholder="未设置"><button type="button" id="p12_password-clear" class="btn ghost secret-clear hidden" onclick="clearSecret('p12_password')">清除</button></div></label>
         </div>
-        <p class="hint">密码通过临时文件传给 openssl，不会出现在命令行或日志中。Emby / Plex 后台需填写相同密码；留空则后台密码栏也留空。</p>
+        <p class="hint">密码只在内存中使用，不会写入日志。Emby / Plex 后台需填写相同密码；留空则后台密码栏也留空。</p>
       </details>
 
       <h2>分发目标</h2>
@@ -171,11 +171,11 @@
       <p>飞牛应用默认只能访问自己的数据目录、临时目录和声明的共享目录，<b>不能直接写用户的其他文件夹</b>。如果分发目标不在默认共享目录里，请先到飞牛「应用设置 → 授权路径」把目标目录授权给本应用；应用概览页会列出已授权的路径，并在路径不可写时提示。</p>
       <ul>
         <li><b>飞牛</b>：保持 <code>${APPDATA}</code> / <code>${SHARE}</code> 等变量写法即可，平台会自动替换。</li>
-        <li><b>Windows</b>：双击运行即是正式模式，DDNS 更新、分发与定时任务都会真实执行；配置保存在 <code>%LOCALAPPDATA%\dynv6</code>。本地界面使用一次性令牌保护，请从托盘「打开界面」进入，不要直接访问裸地址。证书签发/转换需要 <b>Git for Windows</b>（自带 sh 和 openssl），装好后重启应用会自动识别；没装也不影响 DDNS 与分发。</li>
+        <li><b>Windows</b>：双击运行即是正式模式，DDNS 更新、证书签发、分发与定时任务都会真实执行；配置保存在 <code>%LOCALAPPDATA%\dynv6</code>。本地界面使用一次性令牌保护，请从托盘「打开界面」进入，不要直接访问裸地址。证书签发与格式转换均已内置，无需安装 Git / OpenSSL。</li>
         <li><b>Docker</b>：设置 <code>DYNV6_OUTPUT_DIR</code> 等环境变量并挂载卷，或直接填容器内路径。</li>
       </ul>
       <h2>关于证书机构</h2>
-      <p>这里只提供 <b>Let's Encrypt 正式</b> 与 <b>staging 测试</b> 两种：两者都在内置 acme.sh 的 CA 别名表中，配合 dns_dynv6 插件用现有 Token 即可签发，不需要额外凭据。测试证书默认只导出到主输出目录，<b>不会分发到 Emby/Plex</b>；只有显式勾选「允许把测试证书分发到 Emby / Plex」才会覆盖目标文件。ZeroSSL / SSL.com / Google 需要 EAB 外部账户绑定凭据，Buypass 已不在当前 acme.sh 的支持列表里，因此不提供这些选项。</p>
+      <p>这里只提供 <b>Let's Encrypt 正式</b> 与 <b>staging 测试</b> 两种，均由内置的纯 Go ACME 客户端通过 dynv6 DNS-01 签发，使用现有 HTTP Token 即可，不需要额外凭据。测试证书默认只导出到主输出目录，<b>不会分发到 Emby/Plex</b>；只有显式勾选「允许把测试证书分发到 Emby / Plex」才会覆盖目标文件。其它 CA 需要 EAB 外部账户绑定凭据或额外配置，因此不提供这些选项。</p>
       <h2>飞牛系统自身的 SSL 证书</h2>
       <p>本应用<b>不会</b>自动写入系统证书目录（该目录与数据库结构属于飞牛内部实现，升级易失效）。如需让飞牛后台也用这张证书：进入「系统设置 → 安全性 → SSL 证书 → 新增证书」，证书文件选 <code>fullchain.crt</code>，私钥选 <code>.key</code>，手动上传一次即可。之后每 90 天的续期、格式转换、分发由本应用自动完成。</p>
       <h2>Emby</h2>

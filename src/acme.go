@@ -1,16 +1,25 @@
 package main
 
 import (
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
+	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
+
+	"github.com/go-acme/lego/v4/certcrypto"
+	"github.com/go-acme/lego/v4/certificate"
+	"github.com/go-acme/lego/v4/lego"
+	"github.com/go-acme/lego/v4/registration"
 )
 
 func (a *App) acmeHome(c Config) string {
@@ -46,67 +55,11 @@ func (a *App) fileSet(c Config) map[string]string {
 	}
 }
 
-func (a *App) prepareAcme(c Config) (string, error) {
-	home := a.acmeHome(c)
-	read := func(diskRel, embedRel string) ([]byte, error) {
-		if data, err := os.ReadFile(filepath.Join(a.paths.Dest, "vendor", diskRel)); err == nil {
-			return data, nil
-		}
-		return embeddedVendor.ReadFile("embedded/" + embedRel)
-	}
-	script, err := read("acme.sh", "acme.sh")
-	if err != nil {
-		return "", fmt.Errorf("缺少内置 acme.sh，请重新构建: %w", err)
-	}
-	plugin, err := read(filepath.Join("dnsapi", "dns_dynv6.sh"), "dnsapi/dns_dynv6.sh")
-	if err != nil {
-		return "", fmt.Errorf("缺少内置 dns_dynv6 插件，请重新构建: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Join(home, "dnsapi"), 0700); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(filepath.Join(home, "acme.sh"), script, 0755); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(filepath.Join(home, "dnsapi", "dns_dynv6.sh"), plugin, 0755); err != nil {
-		return "", err
-	}
-	return home, nil
-}
-
-func (a *App) acmeArgs(c Config, extra ...string) ([]string, []string, string, error) {
-	if c.Domain == "" || c.Token == "" {
-		return nil, nil, "", fmt.Errorf("请先在设置中填写域名与 dynv6 HTTP Token")
-	}
-	if !a.tools.HasShell() {
-		return nil, nil, "", fmt.Errorf("当前系统找不到 sh，无法执行证书签发。Windows 请先安装 Git for Windows（自带 sh/openssl）；DDNS 与分发不受影响")
-	}
-	home, err := a.prepareAcme(c)
-	if err != nil {
-		return nil, nil, "", err
-	}
-	args := append([]string{a.acmePath(filepath.Join(home, "acme.sh"))}, extra...)
-	args = append(args, "--home", a.acmePath(home))
-	env := []string{
-		"DYNV6_TOKEN=" + c.Token,
-		"ACME_NO_COLOR=1",
-	}
-	return args, env, home, nil
-}
-
-// acmePath 在 Windows 上把路径转成 C:/... 形式，Git Bash 下的 acme.sh 才能正确处理
-func (a *App) acmePath(p string) string {
-	if runtime.GOOS == "windows" {
-		return filepath.ToSlash(p)
-	}
-	return p
-}
-
 func isECC(c Config) bool {
 	return strings.HasPrefix(c.KeyLength, "ec-")
 }
 
-// acme.sh 的 CA 地址常量（与内置 acme.sh 的 CA_LETSENCRYPT_V2 / _TEST 一致）
+// Let's Encrypt 的 ACME 目录地址
 const (
 	caServerLE     = "https://acme-v02.api.letsencrypt.org/directory"
 	caServerLETest = "https://acme-staging-v02.api.letsencrypt.org/directory"
@@ -119,198 +72,174 @@ func caServerURL(ca string) string {
 	return caServerLE
 }
 
-// certConfPath 定位 acme.sh 保存的域名配置（Le_API / Le_Domain 等）；优先当前密钥类型。
-func (a *App) certConfPath(c Config) string {
-	if c.Domain == "" {
-		return ""
+func keyTypeFor(keyLength string) certcrypto.KeyType {
+	switch keyLength {
+	case "ec-384":
+		return certcrypto.EC384
+	case "2048":
+		return certcrypto.RSA2048
+	case "4096":
+		return certcrypto.RSA4096
+	default:
+		return certcrypto.EC256
 	}
-	home := a.acmeHome(c)
-	dirs := []string{c.Domain, c.Domain + "_ecc"}
-	if isECC(c) {
-		dirs = []string{c.Domain + "_ecc", c.Domain}
+}
+
+// acmeUser 实现 lego 的 registration.User 接口，账号密钥保存在 acme 目录，重启后复用。
+type acmeUser struct {
+	Email string
+	key   crypto.Signer
+	reg   *registration.Resource
+}
+
+func (u *acmeUser) GetEmail() string                        { return u.Email }
+func (u *acmeUser) GetRegistration() *registration.Resource { return u.reg }
+func (u *acmeUser) GetPrivateKey() crypto.PrivateKey        { return u.key }
+
+type acmeAccountFile struct {
+	Email    string                 `json:"email,omitempty"`
+	Resource *registration.Resource `json:"resource,omitempty"`
+}
+
+func (a *App) loadAcmeUser(home string) (*acmeUser, error) {
+	if err := os.MkdirAll(home, 0700); err != nil {
+		return nil, err
 	}
-	for _, dir := range dirs {
-		p := filepath.Join(home, dir, c.Domain+".conf")
-		if _, err := os.Stat(p); err == nil {
-			return p
+	keyPath := filepath.Join(home, "account.key")
+	var key *ecdsa.PrivateKey
+	if data, err := os.ReadFile(keyPath); err == nil {
+		if signer, err := parsePrivateKey(data); err == nil {
+			if k, ok := signer.(*ecdsa.PrivateKey); ok {
+				key = k
+			}
 		}
 	}
-	return ""
-}
-
-// confMismatch 检测 acme.sh 已保存的密钥长度/泛域名设置是否与当前配置一致。
-func (a *App) confMismatch(c Config) (bool, string) {
-	conf := a.certConfPath(c)
-	if conf == "" {
-		return false, ""
-	}
-	if saved := readConfValue(conf, "Le_Keylength"); saved != "" && saved != c.KeyLength {
-		return true, fmt.Sprintf("密钥算法已从 %s 变为 %s", saved, c.KeyLength)
-	}
-	savedAlt := readConfValue(conf, "Le_Alt")
-	hasWildcard := strings.Contains(savedAlt, "*."+c.Domain)
-	if hasWildcard != c.Wildcard {
-		if c.Wildcard {
-			return true, "泛域名设置已开启"
+	if key == nil {
+		k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return nil, fmt.Errorf("生成 ACME 账户密钥失败: %w", err)
 		}
-		return true, "泛域名设置已关闭"
-	}
-	return false, ""
-}
-
-// readConfValue 读取 acme.sh 域名配置文件中的 key='value' 形式的值
-func readConfValue(path, key string) string {
-	if path == "" {
-		return ""
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	prefix := key + "="
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, prefix) {
-			continue
+		der, err := x509.MarshalECPrivateKey(k)
+		if err != nil {
+			return nil, err
 		}
-		return strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, prefix)), "'\"")
+		block := &pem.Block{Type: "EC PRIVATE KEY", Bytes: der}
+		if err := atomicWrite(keyPath, pem.EncodeToMemory(block), 0600); err != nil {
+			return nil, fmt.Errorf("保存 ACME 账户密钥失败: %w", err)
+		}
+		key = k
 	}
-	return ""
-}
-
-// acmeSkipError 表示 acme.sh 主动跳过（未到期/域名未变化/未签发），并非失败。
-type acmeSkipError struct {
-	out string
-}
-
-func (e *acmeSkipError) Error() string {
-	return "acme.sh 跳过：" + summarizeCmdOutput(e.out)
-}
-
-func isAcmeSkip(err error) bool {
-	var skip *acmeSkipError
-	return errors.As(err, &skip)
-}
-
-func exitCode(err error) int {
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
-		return ee.ExitCode()
+	user := &acmeUser{key: key}
+	if data, err := os.ReadFile(filepath.Join(home, "account.json")); err == nil {
+		var saved acmeAccountFile
+		if json.Unmarshal(data, &saved) == nil {
+			user.Email = saved.Email
+			user.reg = saved.Resource
+		}
 	}
-	return -1
+	return user, nil
 }
 
-func (a *App) runAcme(c Config, extra []string, timeout time.Duration) error {
-	args, env, _, err := a.acmeArgs(c, extra...)
+func (a *App) saveAcmeAccount(home, email string, reg *registration.Resource) error {
+	data, err := json.MarshalIndent(acmeAccountFile{Email: email, Resource: reg}, "", "  ")
 	if err != nil {
 		return err
 	}
-	out, err := a.runCmd(a.tools.Sh, args, env, timeout, a.secrets(c), a.log)
+	return atomicWrite(filepath.Join(home, "account.json"), data, 0600)
+}
+
+func (a *App) newAcmeClient(c Config, home string) (*lego.Client, error) {
+	user, err := a.loadAcmeUser(home)
 	if err != nil {
-		// acme.sh 用退出码 2 表示“无需续期/域名未变化/未签发”，不是错误
-		if exitCode(err) == 2 {
-			return &acmeSkipError{out: out}
-		}
-		msg := err.Error()
-		if summary := summarizeCmdOutput(out); summary != "" {
-			msg += "；" + summary
-		}
-		if reason := classifyAcmeError(out); reason != "" {
-			msg += "；可能原因：" + reason
-		}
-		return fmt.Errorf("%s", msg)
+		return nil, err
 	}
-	return nil
+	user.Email = strings.TrimSpace(c.Email)
+	cfg := lego.NewConfig(user)
+	cfg.CADirURL = caServerURL(c.CA)
+	cfg.Certificate.KeyType = keyTypeFor(c.KeyLength)
+	cfg.HTTPClient = &http.Client{Timeout: 90 * time.Second}
+	client, err := lego.NewClient(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("初始化 ACME 客户端失败: %w", err)
+	}
+	if user.reg == nil {
+		reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
+		if err != nil {
+			return nil, fmt.Errorf("注册 ACME 账户失败: %s", describeAcmeError(err))
+		}
+		user.reg = reg
+		if err := a.saveAcmeAccount(home, user.Email, reg); err != nil {
+			a.log("保存 ACME 账户信息失败（不影响签发）: %v", err)
+		}
+	}
+	provider := newDynv6DNS(c.Token, time.Duration(c.DNSSleep)*time.Second)
+	if err := client.Challenge.SetDNS01Provider(provider); err != nil {
+		return nil, fmt.Errorf("设置 DNS-01 验证失败: %w", err)
+	}
+	return client, nil
 }
 
-// classifyAcmeError 从 acme.sh 输出中识别常见失败原因，给出可操作的建议
-func classifyAcmeError(out string) string {
-	s := strings.ToLower(out)
-	switch {
-	case strings.Contains(s, "no zone found") || strings.Contains(s, "matching zone") || strings.Contains(s, "not authorized to access the zone"):
-		return "HTTP Token 无权访问该域名（zone）：请确认 Token 是账户级令牌，或属于当前域名"
-	case strings.Contains(s, "invalid authentication token") || strings.Contains(s, "token for authorization missing") || strings.Contains(s, "unauthorized"):
-		return "HTTP Token 无效或已过期，请到 dynv6 后台 Keys → HTTP Tokens 重新复制"
-	case strings.Contains(s, "error adding txt"):
-		return "创建 TXT 记录失败：多半是 Token 无权访问该域名，或域名不在当前 dynv6 账号下"
-	case strings.Contains(s, "register account error") || strings.Contains(s, "too many") || strings.Contains(s, "429") || strings.Contains(s, "rate limit"):
-		return "触发了证书机构限流或账户注册失败，请稍后再试（测试环境请用 letsencrypt_test）"
-	case strings.Contains(s, "dns problem") || strings.Contains(s, "verify error") || strings.Contains(s, "challenge"):
-		return "DNS 记录未生效或验证失败，可加大「DNS 生效等待」后重试"
-	case strings.Contains(s, "timeout") || strings.Contains(s, "timed out"):
-		return "网络或 DNS 查询超时，请检查设备出网、DNS 与代理/出口节点设置"
-	default:
-		return ""
-	}
-}
-
+// issueCert 通过 lego 走 DNS-01 直接签发，证书与私钥由 Go 写入，不再依赖 acme.sh。
 func (a *App) issueCert(c Config, force bool) error {
+	if c.Domain == "" || c.Token == "" {
+		return fmt.Errorf("请先在设置中填写域名与 dynv6 HTTP Token")
+	}
 	if c.CA != "letsencrypt" && c.CA != "letsencrypt_test" {
 		return fmt.Errorf("不支持的证书机构 %q：仅支持 letsencrypt 与 letsencrypt_test", c.CA)
 	}
-	// acme.sh 判断“是否跳过”只看域名列表，不看 CA；切换机构时必须显式 --force，
-	// 否则会把旧证书原样当成本次结果（staging 证书被部署出去会直接不被信任）
-	if saved := readConfValue(a.certConfPath(c), "Le_API"); saved != "" && saved != caServerURL(c.CA) {
-		a.log("证书机构已从 %s 切换为 %s，本次强制重新签发", saved, caServerURL(c.CA))
-		force = true
-	}
-	if mismatch, reason := a.confMismatch(c); mismatch {
-		a.log("%s，本次强制重新签发", reason)
-		force = true
-	}
-	args := []string{"--issue", "--dns", "dns_dynv6", "-d", c.Domain}
-	if c.Wildcard {
-		args = append(args, "-d", "*."+c.Domain)
-	}
-	args = append(args, "--server", c.CA, "--keylength", c.KeyLength, "--dnssleep", fmt.Sprintf("%d", c.DNSSleep))
-	if c.Email != "" {
-		args = append(args, "--accountemail", c.Email)
-	}
-	if force {
-		args = append(args, "--force")
-	}
+	home := a.acmeHome(c)
 	a.setStage("申请证书（DNS-01，等待 DNS 生效）")
-	a.log("开始签发证书 domain=%s wildcard=%v ca=%s", c.Domain, c.Wildcard, c.CA)
-	if err := a.runAcme(c, args, 10*time.Minute); err != nil {
-		if isAcmeSkip(err) {
-			a.log("acme.sh 判定无需重新签发（域名未变化/未到期），继续导出已有证书")
-		} else {
-			a.notify("证书签发失败", fmt.Sprintf("%s：%v", c.Domain, err))
-			return err
-		}
+	a.log("开始签发证书（Go ACME）domain=%s wildcard=%v ca=%s key=%s", c.Domain, c.Wildcard, c.CA, c.KeyLength)
+	client, err := a.newAcmeClient(c, home)
+	if err != nil {
+		a.notify("证书签发失败", fmt.Sprintf("%s：%v", c.Domain, err))
+		return err
 	}
-	a.setStage("导出 PEM")
-	if err := a.installPEM(c); err != nil {
-		if isAcmeSkip(err) {
-			return fmt.Errorf("acme.sh 跳过了签发，但未能导出已有证书；请点「立即签发」强制重新签发: %w", err)
-		}
+	if a.wasCanceled() {
+		return fmt.Errorf("任务已取消")
+	}
+	domains := []string{c.Domain}
+	if c.Wildcard {
+		domains = append(domains, "*."+c.Domain)
+	}
+	res, err := client.Certificate.Obtain(certificate.ObtainRequest{Domains: domains, Bundle: true})
+	if err != nil {
+		msg := describeAcmeError(err)
+		a.notify("证书签发失败", fmt.Sprintf("%s：%s", c.Domain, msg))
+		return fmt.Errorf("%s", msg)
+	}
+	a.setStage("写入 PEM")
+	if err := a.installPEM(c, res); err != nil {
 		a.notify("证书导出失败", fmt.Sprintf("%s：%v", c.Domain, err))
 		return err
 	}
 	return nil
 }
 
-func (a *App) installPEM(c Config) error {
+// installPEM 把 lego 返回的证书写入 PEM 文件并自检。
+func (a *App) installPEM(c Config, res *certificate.Resource) error {
 	f := a.fileSet(c)
 	if err := os.MkdirAll(a.outDir(c), 0700); err != nil {
 		return err
 	}
-	args := []string{"--install-cert", "-d", c.Domain,
-		"--key-file", a.acmePath(f["key"]),
-		"--fullchain-file", a.acmePath(f["fullchain"]),
-		"--cert-file", a.acmePath(f["cert"]),
-		"--ca-file", a.acmePath(f["chain"]),
-	}
-	if isECC(c) {
-		args = append(args, "--ecc")
-	}
-	if err := a.runAcme(c, args, 5*time.Minute); err != nil {
-		return err
-	}
+	fullchain := append(append([]byte{}, res.Certificate...), res.IssuerCertificate...)
 	mode := parseMode(c.FileMode)
+	files := map[string][]byte{
+		"key":       res.PrivateKey,
+		"cert":      res.Certificate,
+		"fullchain": fullchain,
+		"chain":     res.IssuerCertificate,
+	}
 	for _, k := range []string{"key", "cert", "fullchain", "chain"} {
-		if _, err := os.Stat(f[k]); err != nil {
-			return fmt.Errorf("证书导出不完整，缺少 %s", f[k])
+		data := files[k]
+		if len(data) == 0 {
+			if k == "chain" {
+				continue
+			}
+			return fmt.Errorf("证书导出不完整，缺少 %s", k)
+		}
+		if err := atomicWrite(f[k], data, mode); err != nil {
+			return err
 		}
 		_ = os.Chmod(f[k], mode)
 	}
@@ -321,50 +250,113 @@ func (a *App) installPEM(c Config) error {
 	return nil
 }
 
+// renewCert 在证书接近到期时重新签发；Go 客户端每次都会完整走一遍签发流程。
 func (a *App) renewCert(c Config, force bool) error {
-	// 没有现成证书时 acme.sh 的 --renew 会直接报“域名不存在”，改为直接签发
 	if _, err := os.Stat(a.fileSet(c)["fullchain"]); err != nil {
 		a.log("未找到现有证书，改为首次签发")
 		return a.issueCert(c, force)
 	}
-	// acme.sh 的 --renew 会沿用配置里记录的 CA/密钥长度/泛域名列表，任一项变化都要重新签发
-	if saved := readConfValue(a.certConfPath(c), "Le_API"); saved != "" && saved != caServerURL(c.CA) {
-		a.log("证书机构已切换为 %s，改为重新签发而不是续期", caServerURL(c.CA))
-		return a.issueCert(c, true)
-	}
-	if mismatch, reason := a.confMismatch(c); mismatch {
-		a.log("%s，改为重新签发而不是续期", reason)
-		return a.issueCert(c, true)
-	}
-	args := []string{"--renew", "-d", c.Domain}
-	if isECC(c) {
-		args = append(args, "--ecc")
-	}
-	if force {
-		args = append(args, "--force")
+	if !force {
+		if t, err := certNotAfter(a.fileSet(c)["fullchain"]); err == nil {
+			days := int(time.Until(t).Hours() / 24)
+			if days > c.RenewDays {
+				a.log("证书剩余 %d 天，未到续期阈值 %d 天，跳过续期", days, c.RenewDays)
+				return nil
+			}
+		}
 	}
 	a.setStage("续期证书（DNS-01，等待 DNS 生效）")
 	a.log("开始续期证书 domain=%s force=%v", c.Domain, force)
-	if err := a.runAcme(c, args, 10*time.Minute); err != nil {
-		if isAcmeSkip(err) {
-			// acme home 丢了（找不到域名配置）时 acme.sh 也会用 2 表示跳过，此时必须重新签发
-			if a.certConfPath(c) == "" {
-				a.log("acme.sh 找不到已签发域名配置，改为重新签发")
-				return a.issueCert(c, true)
-			}
-			a.log("acme.sh 判定暂不需要续期，继续导出已有证书")
-		} else {
-			a.notify("证书续期失败", fmt.Sprintf("%s：%v", c.Domain, err))
-			return err
+	return a.issueCert(c, true)
+}
+
+// certConfigMismatch 通过现有私钥/证书判断密钥算法与泛域名设置是否与当前配置一致。
+func (a *App) certConfigMismatch(c Config) (bool, string) {
+	f := a.fileSet(c)
+	keyData, err := os.ReadFile(f["key"])
+	if err != nil {
+		return false, ""
+	}
+	signer, err := parsePrivateKey(keyData)
+	if err != nil {
+		return false, ""
+	}
+	switch k := signer.(type) {
+	case *ecdsa.PrivateKey:
+		bits := k.Curve.Params().BitSize
+		if !isECC(c) {
+			return true, fmt.Sprintf("密钥算法已从 ec-%d 变为 %s", bits, c.KeyLength)
+		}
+		want := 256
+		if c.KeyLength == "ec-384" {
+			want = 384
+		}
+		if bits != want {
+			return true, fmt.Sprintf("密钥算法已从 ec-%d 变为 %s", bits, c.KeyLength)
+		}
+	case *rsa.PrivateKey:
+		if isECC(c) {
+			return true, fmt.Sprintf("密钥算法已从 RSA-%d 变为 %s", k.N.BitLen(), c.KeyLength)
+		}
+		want := 2048
+		if c.KeyLength == "4096" {
+			want = 4096
+		}
+		if k.N.BitLen() != want {
+			return true, fmt.Sprintf("密钥算法已从 RSA-%d 变为 %s", k.N.BitLen(), c.KeyLength)
 		}
 	}
-	// acme.sh 的 install-cert 参数会被记住并在 renew 时自动执行，这里再显式导出一次确保路径可控
-	a.setStage("导出 PEM")
-	if err := a.installPEM(c); err != nil {
-		a.notify("证书导出失败", fmt.Sprintf("%s：%v", c.Domain, err))
-		return err
+	if data, err := os.ReadFile(f["fullchain"]); err == nil {
+		if leaf, _, err := parseCertificates(data); err == nil {
+			hasWildcard := false
+			for _, name := range leaf.DNSNames {
+				if strings.HasPrefix(name, "*.") {
+					hasWildcard = true
+					break
+				}
+			}
+			if hasWildcard != c.Wildcard {
+				if c.Wildcard {
+					return true, "泛域名设置已开启"
+				}
+				return true, "泛域名设置已关闭"
+			}
+		}
 	}
-	return nil
+	return false, ""
+}
+
+// describeAcmeError 把 lego 的错误转换成可操作的中文提示。
+func describeAcmeError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	if hint := classifyAcmeError(msg); hint != "" {
+		return msg + "；可能原因：" + hint
+	}
+	return msg
+}
+
+// classifyAcmeError 从错误信息中识别常见失败原因，给出可操作的建议
+func classifyAcmeError(out string) string {
+	s := strings.ToLower(out)
+	switch {
+	case strings.Contains(s, "no zone found") || strings.Contains(s, "matching zone") || strings.Contains(s, "not authorized to access the zone"):
+		return "HTTP Token 无权访问该域名（zone）：请确认 Token 是账户级令牌，或属于当前域名"
+	case strings.Contains(s, "invalid authentication token") || strings.Contains(s, "token for authorization missing") || strings.Contains(s, "unauthorized") || strings.Contains(s, "401"):
+		return "HTTP Token 无效或已过期，请到 dynv6 后台 Keys → HTTP Tokens 重新复制"
+	case strings.Contains(s, "error adding txt"):
+		return "创建 TXT 记录失败：多半是 Token 无权访问该域名，或域名不在当前 dynv6 账号下"
+	case strings.Contains(s, "too many") || strings.Contains(s, "429") || strings.Contains(s, "rate limit"):
+		return "触发了证书机构限流，请稍后再试（测试环境请用 letsencrypt_test）"
+	case strings.Contains(s, "dns problem") || strings.Contains(s, "nxdomain") || strings.Contains(s, "propagation") || strings.Contains(s, "challenge"):
+		return "DNS 记录未生效或验证失败，可加大「DNS 生效等待」后重试"
+	case strings.Contains(s, "timeout") || strings.Contains(s, "timed out") || strings.Contains(s, "deadline exceeded"):
+		return "网络或 DNS 查询超时，请检查设备出网、DNS 与代理/出口节点设置"
+	default:
+		return ""
+	}
 }
 
 func certNotAfter(path string) (time.Time, error) {

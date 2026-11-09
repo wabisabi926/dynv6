@@ -11,7 +11,7 @@
   3. 在 fnpack.json 中创建/更新该版本节点（changelog 取日志首条要点）；
   4. 提交前扫描仓库，阻止配置里的真实 Token / 密码 / 私钥 / 证书文件混入；
   5. 调用 build.py 生成飞牛 fpk（x86/arm）与 Windows exe，并收集 Linux 独立二进制；
-  6. 逐个校验 fpk 内容白名单（只允许程序、UI、内置 acme.sh、安装脚本与图标）；
+  6. 逐个校验 fpk 内容白名单（只允许程序、UI、安装脚本与图标）；
   7. 生成 dist/SHA256SUMS.txt 与 build/release_notes.md（中文 GitHub Release 说明）。
 """
 import argparse
@@ -37,8 +37,8 @@ VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.\-]+)?$")
 FPK_TOP_ALLOWED = re.compile(
     r"^(?:manifest|app\.tgz|ICON\.PNG|ICON_256\.PNG|(?:cmd|config|wizard)(?:/.*)?)$"
 )
-# app.tgz 内只允许程序本体、Web UI、内置 acme.sh
-APP_ALLOWED = re.compile(r"^(?:bin/dynv6|ui(?:/.*)?|vendor(?:/.*)?)$")
+# app.tgz 内只允许程序本体与 Web UI
+APP_ALLOWED = re.compile(r"^(?:bin/dynv6|ui(?:/.*)?)$")
 # 任何层级出现这些内容都直接判定失败（本地配置、管理员密码、证书私钥、日志）
 FORBIDDEN_MEMBER = re.compile(
     r"(?:^|/)(?:admin\.json|config\.json|\.env(?:\..*)?)$"
@@ -374,7 +374,7 @@ Get-FileHash .\\dynv6_* -Algorithm SHA256   # Windows PowerShell
 
 ### 本次发布包含 / 不包含
 
-- 包含：程序本体、内置 acme.sh 与 dns_dynv6 插件、Web UI、飞牛安装/卸载脚本与图标、版本信息。
+- 包含：程序本体（纯 Go 证书签发）、Web UI、飞牛安装/卸载脚本与图标、版本信息。
 - 不包含：任何本地配置（dynv6 Token、邮箱、Telegram Token）、管理员密码文件 `admin.json`、证书与私钥（pfx/p12/pem/key）、运行日志、构建缓存、测试与开发文件。
 
 ### 升级说明
@@ -450,7 +450,7 @@ def main():
             for item in problems:
                 log("  - " + item)
             raise SystemExit(1)
-        log("已校验 %s（仅程序/UI/acme.sh/安装脚本）" % os.path.basename(path))
+        log("已校验 %s（仅程序/UI/安装脚本）" % os.path.basename(path))
 
     artifacts = list(expected) + collect_linux_bins(version, not args.no_linux)
     sums_path, sums_lines = write_checksums(artifacts)

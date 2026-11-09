@@ -11,8 +11,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
     -o /out/dynv6 .
 
 FROM alpine:3.20
-# acme.sh 依赖 curl/openssl；bash 兼容少数脚本路径；tzdata 保证定时任务时区正确
-RUN apk add --no-cache bash ca-certificates curl openssl tzdata
+# bash 用于运行飞牛/容器入口脚本；tzdata 保证定时任务时区正确
+RUN apk add --no-cache bash ca-certificates tzdata
 COPY --from=build /out/dynv6 /usr/local/bin/dynv6
 
 ENV DYNV6_DOCKER=1 \

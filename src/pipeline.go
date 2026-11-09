@@ -174,8 +174,5 @@ func (a *App) certConfigChanged(c Config) (bool, string) {
 	if st := a.getState(); st.CertCA != "" && st.CertCA != c.CA {
 		return true, fmt.Sprintf("已签发证书的机构是 %s，当前配置是 %s", st.CertCA, c.CA)
 	}
-	if saved := readConfValue(a.certConfPath(c), "Le_API"); saved != "" && saved != caServerURL(c.CA) {
-		return true, fmt.Sprintf("证书机构已从 %s 切换为 %s", saved, caServerURL(c.CA))
-	}
-	return a.confMismatch(c)
+	return a.certConfigMismatch(c)
 }

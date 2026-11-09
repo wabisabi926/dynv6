@@ -17,8 +17,7 @@ func (a *App) deploy(c Config) error {
 		return fmt.Errorf("当前是测试环境证书且未允许测试证书分发；请切回正式机构，或在设置中显式允许")
 	}
 	st := a.getState()
-	savedCA := readConfValue(a.certConfPath(c), "Le_API")
-	if c.CA == "letsencrypt" && (st.CertCA == "letsencrypt_test" || savedCA == caServerLETest) {
+	if c.CA == "letsencrypt" && st.CertCA == "letsencrypt_test" {
 		return fmt.Errorf("输出目录里仍是测试证书；请先重新签发正式证书再分发")
 	}
 	f := a.fileSet(c)

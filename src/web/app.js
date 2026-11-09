@@ -466,9 +466,6 @@ async function refreshAll() {
   } else if (!r.configured) {
     notice.textContent = '尚未完成配置：请到「设置」填写域名与 dynv6 HTTP Token。';
     notice.classList.remove('hidden');
-  } else if (r.capabilities && !r.capabilities.issue) {
-    notice.textContent = '未找到 sh/openssl：DDNS 更新与分发可正常使用；证书签发/转换请先安装 Git for Windows（自带 sh 和 openssl）后重启应用。';
-    notice.classList.remove('hidden');
   } else if (r.options && r.options.ca === 'letsencrypt_test') {
     notice.textContent = '当前使用 Let\'s Encrypt 测试环境：证书不被客户端信任，默认只导出不分发；调试完成后请切回正式环境。';
     notice.classList.remove('hidden');
@@ -499,7 +496,7 @@ async function refreshAll() {
     ? '<tr><td>路径详情</td><td>需要管理员权限查看</td><td></td></tr>'
     : [
       ['证书输出目录', p.output, mark('output')], ['备份目录', p.backup, mark('backup')],
-      ['acme.sh 目录', p.acme_home, mark('acme_home')], ['配置文件', p.config, '']
+      ['ACME 数据目录', p.acme_home, mark('acme_home')], ['配置文件', p.config, '']
     ].map(x => '<tr><td>' + esc(x[0]) + '</td><td><code>' + esc(x[1]) + '</code></td><td>' + x[2] + '</td></tr>').join('');
   const ap = r.authorized_paths || [];
   const apEl = document.getElementById('auth-paths');

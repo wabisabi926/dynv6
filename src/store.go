@@ -272,7 +272,7 @@ func (a *App) wasCanceled() bool {
 	return a.cancelReq
 }
 
-// cancelCurrent 终止当前正在执行的外部命令（acme.sh/openssl）
+// cancelCurrent 标记取消（证书签发为内置 HTTP 流程，会在阶段间尽快退出）
 func (a *App) cancelCurrent() bool {
 	a.cmdMu.Lock()
 	cmd := a.currentCmd

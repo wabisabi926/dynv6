@@ -7,7 +7,7 @@ dynv6 动态域名（DDNS）自动更新 + Let's Encrypt 证书自动签发、�
 ## 功能
 
 - **DDNS**：支持 IPv4 / IPv6，公网 IP 变化时自动调用 dynv6 API 更新记录，支持强制更新与手动触发。
-- **证书**：基于 acme.sh + DNS-01（`dns_dynv6`）签发 Let's Encrypt 证书，自动续期；支持泛域名、EC/RSA 密钥长度切换。
+- **证书**：内置纯 Go ACME 客户端（lego），通过 dynv6 DNS-01 签发 Let's Encrypt 证书并自动续期，不依赖 sh / curl / openssl；支持泛域名、EC/RSA 密钥长度切换。
 - **分发**：证书可导出 PEM，并自动生成 Emby 使用的 PFX、Plex 使用的 P12，输出路径与文件名均可自定义。
 - **通知**：支持 Telegram 等通知渠道，任务成功/失败均可推送。
 - **调度**：内置定时任务，IP 探测、DDNS、证书检查按设定间隔运行；日志自动轮转。
@@ -121,7 +121,7 @@ python scripts/release.py --version 1.0.0 --tag v1.0.0
 ## 目录结构
 
 ```
-app/        飞牛应用资源（ui/config、图标、内置 acme.sh）
+app/        飞牛应用资源（ui/config、图标）
 cmd/        飞牛安装包生命周期脚本（start/stop/status 等）
 config/     飞牛应用权限与资源声明
 manifest    飞牛应用清单（service_port=8092）
@@ -132,9 +132,10 @@ scripts/    构建、图标、预览与发布脚本
 
 ## 第三方组件
 
-- [acme.sh](https://github.com/acmesh-official/acme.sh)：GPLv3，随安装包内置并在运行时调用，其许可证以项目上游为准。
+- [lego](https://github.com/go-acme/lego)：MIT，纯 Go 的 ACME 客户端，用于证书签发。
+- [go-pkcs12](https://github.com/SSLMate/go-pkcs12)：BSD-3-Clause，用于生成 PFX/P12。
 - Let's Encrypt、Emby、Plex、dynv6 为各自所有者的商标或服务，本项目与其无隶属关系。
 
 ## 许可证
 
-本项目源码采用 [MIT License](LICENSE)。内置的 acme.sh 等第三方组件遵循各自许可证。
+本项目源码采用 [MIT License](LICENSE)。

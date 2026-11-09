@@ -411,7 +411,7 @@ func (a *App) validateManagedPaths(c Config) error {
 	}{
 		{"证书输出目录", c.OutputDir},
 		{"备份目录", c.BackupDir},
-		{"acme.sh 目录", c.AcmeHome},
+		{"ACME 数据目录", c.AcmeHome},
 	}
 	for _, item := range items {
 		raw := strings.TrimSpace(item.raw)

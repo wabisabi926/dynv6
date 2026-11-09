@@ -86,16 +86,6 @@ def make_icons(force=False):
                 os.path.join(embed_dir, "ICON_64.PNG"))
 
 
-def sync_vendor_embed():
-    """把 app/vendor 的脚本同步到 src/embedded，供 Go embed 打进 Windows/Linux 二进制。"""
-    src = os.path.join(ROOT, "app", "vendor")
-    dst = os.path.join(SRC, "embedded")
-    os.makedirs(os.path.join(dst, "dnsapi"), exist_ok=True)
-    shutil.copy(os.path.join(src, "acme.sh"), os.path.join(dst, "acme.sh"))
-    shutil.copy(os.path.join(src, "dnsapi", "dns_dynv6.sh"), os.path.join(dst, "dnsapi", "dns_dynv6.sh"))
-    print("已同步内嵌 acme.sh 与 dns_dynv6.sh")
-
-
 def add_file(tar, path, arcname, mode):
     info = tar.gettarinfo(path, arcname=arcname)
     info.mode = mode
@@ -206,7 +196,7 @@ def stage_fnos(arch, version, stage_app):
         shutil.copy(os.path.join(ROOT, icon), os.path.join(stage, icon))
 
     # fnOS 以应用身份执行回调脚本，必须显式设置可执行位
-    exec_files = {"app/bin/dynv6", "app/vendor/acme.sh", "app/vendor/dnsapi/dns_dynv6.sh"}
+    exec_files = {"app/bin/dynv6"}
     exec_files.update("cmd/" + fn for fn in os.listdir(os.path.join(stage, "cmd")))
     _chmod_tree(stage, exec_files)
     return stage
@@ -270,7 +260,6 @@ def main():
     os.makedirs(BUILD, exist_ok=True)
     os.makedirs(DIST, exist_ok=True)
     make_icons(args.force_icons)
-    sync_vendor_embed()
     ensure_windows_icon()
 
     targets = list(ARCHS.keys()) if args.arch == "all" else [args.arch]
@@ -294,7 +283,6 @@ def main():
             shutil.rmtree(stage_app)
         os.makedirs(os.path.join(stage_app, "bin"))
         os.makedirs(os.path.join(stage_app, "ui", "www"))
-        shutil.copytree(os.path.join(ROOT, "app", "vendor"), os.path.join(stage_app, "vendor"))
         shutil.copy(os.path.join(ROOT, "app", "ui", "config"), os.path.join(stage_app, "ui", "config"))
         shutil.copytree(os.path.join(ROOT, "app", "ui", "images"), os.path.join(stage_app, "ui", "images"))
         for fn in ("index.html", "app.js", "style.css"):

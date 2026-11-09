@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -108,35 +107,6 @@ func TestValidateManagedPaths(t *testing.T) {
 	}
 }
 
-func TestConfMismatch(t *testing.T) {
-	home := t.TempDir()
-	a := &App{paths: Paths{Var: t.TempDir()}}
-	c := Config{Domain: "a.example.com", AcmeHome: home, KeyLength: "ec-256", Wildcard: true}
-	dir := filepath.Join(home, "a.example.com_ecc")
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		t.Fatal(err)
-	}
-	conf := filepath.Join(dir, "a.example.com.conf")
-	write := func(keyLength, alt string) {
-		content := "Le_Keylength='" + keyLength + "'\nLe_Alt='" + alt + "'\n"
-		if err := os.WriteFile(conf, []byte(content), 0600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("ec-256", "")
-	if mismatch, _ := a.confMismatch(c); !mismatch {
-		t.Fatal("开启泛域名应检测到不匹配")
-	}
-	write("ec-256", "*.a.example.com")
-	if mismatch, _ := a.confMismatch(c); mismatch {
-		t.Fatal("密钥长度与泛域名一致时不应报不匹配")
-	}
-	write("2048", "*.a.example.com")
-	if mismatch, _ := a.confMismatch(c); !mismatch {
-		t.Fatal("密钥长度变化应检测到不匹配")
-	}
-}
-
 func TestHasDotDot(t *testing.T) {
 	bad := []string{"/vol1/../etc", "..", "/vol1/1000/..", `C:\certs\..\windows`}
 	for _, p := range bad {
@@ -159,14 +129,5 @@ func TestNormalizeAllowsZeroDNSSleep(t *testing.T) {
 	}
 	if got := a.normalize(Config{DNSSleep: -1}).DNSSleep; got != 120 {
 		t.Fatalf("负数应回退默认 120，实际 %d", got)
-	}
-}
-
-func TestIsAcmeSkip(t *testing.T) {
-	if !isAcmeSkip(&acmeSkipError{out: "Domains not changed."}) {
-		t.Fatal("acmeSkipError 应被识别")
-	}
-	if isAcmeSkip(errors.New("other")) {
-		t.Fatal("普通错误不应被识别为跳过")
 	}
 }
