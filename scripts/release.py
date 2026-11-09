@@ -99,7 +99,7 @@ def run_build(base_url):
 
 
 def check_fpk(path, version):
-    with tarfile.open(path, "r:gz") as tar:
+    with tarfile.open(path, "r:*") as tar:
         names = tar.getnames()
         for name in names:
             if not FPK_TOP_ALLOWED.match(name):
@@ -109,7 +109,7 @@ def check_fpk(path, version):
         text = tar.extractfile("manifest").read().decode("utf-8", "ignore")
         if "version=%s" % version not in text:
             raise SystemExit("%s 版本号不是 %s" % (path, version))
-        with tarfile.open(fileobj=tar.extractfile("app.tgz"), mode="r:gz") as app:
+        with tarfile.open(fileobj=tar.extractfile("app.tgz"), mode="r:*") as app:
             for name in app.getnames():
                 if not APP_ALLOWED.match(name):
                     raise SystemExit("%s app.tgz 多余文件: %s" % (path, name))
