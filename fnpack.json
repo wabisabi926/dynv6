@@ -38,6 +38,22 @@
               "size": 3502515
             }
           }
+        },
+        "1.0.1": {
+          "changelog": "新图标与移动端适配。",
+          "packages": {
+            "x86": {
+              "sha256": "bcf11405befe91f880826bdc1e85922790c1e1c8229548495d52dbf3af91d00f",
+              "size": 3665789,
+              "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.1/dynv6_1.0.1_x86.fpk"
+            },
+            "arm": {
+              "sha256": "474d47cf14e4e9ea6ba0c361d3bd452d194055e0c619d890f59d7ffd36cdb3fb",
+              "size": 3309252,
+              "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.1/dynv6_1.0.1_arm.fpk"
+            }
+          },
+          "updated_at": "2026-11-09T23:39:44+08:00"
         }
       }
     }

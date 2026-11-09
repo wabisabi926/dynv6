@@ -69,6 +69,7 @@ h2:first-child{margin-top:0}
 .advanced h2:first-of-type{margin-top:6px}
 code{background:var(--bg);padding:1px 5px;border-radius:4px;font-size:12px}
 table{width:100%;border-collapse:collapse;font-size:13px}
+.table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
 th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--muted);font-weight:500;background:#fafbfd}
 .kv td:first-child{width:170px;color:var(--muted)}
@@ -106,4 +107,59 @@ label.check.inline{display:inline-flex;margin:0}
 .auth-form input{width:100%}
 .auth-form .btn{width:100%;margin-top:4px}
 .auth-error{min-height:18px;margin:10px 0 0;font-size:13px;color:var(--red);text-align:left}
-@media(max-width:640px){.wrap{padding:12px}.top{flex-direction:column;align-items:flex-start;gap:10px}.panel{padding:14px}.auth-card{padding:22px}}
+/* 移动端：单列布局、可横向滚动的表格、更大的点按区域 */
+@media(max-width:720px){
+  .wrap{padding:10px 10px 32px}
+  .top{padding:12px 14px;gap:10px}
+  .logo{width:36px;height:36px;border-radius:9px}
+  h1{font-size:16px}
+  .brand{min-width:0}
+  .brand>div{min-width:0}
+  .brand p{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top-right{width:100%;flex-wrap:wrap;gap:8px}
+  .tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:5px}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto;white-space:nowrap;padding:8px 13px;font-size:13px}
+  .panel{padding:14px 12px;border-radius:12px}
+  h2{font-size:14px;margin:20px 0 10px}
+  .cards{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+  .card{padding:10px 12px}
+  .card strong{font-size:16px}
+  .grid,.target .grid{grid-template-columns:1fr;gap:10px}
+  .grid .wide{grid-column:auto}
+  .actions .btn{flex:1 1 calc(50% - 8px)}
+  .savebar{flex-direction:column;align-items:stretch;gap:8px}
+  .savebar .btn{width:100%}
+  .table-wrap table{min-width:560px}
+  .table-wrap table.kv{min-width:0}
+  .kv td:last-child{white-space:nowrap}
+  .kv code{white-space:normal;word-break:break-all}
+  th,td{padding:8px 9px}
+  .kv td:first-child{width:auto;white-space:nowrap;padding-right:14px}
+  .logs{height:56vh;padding:10px}
+  .modal{padding:8px}
+  .modal-box{padding:12px;max-height:94vh}
+  .dp-list{min-height:150px;max-height:46vh}
+  .dp-path{flex-wrap:wrap}
+  .target-head{flex-wrap:wrap}
+  input,select{font-size:16px} /* 避免 iOS 聚焦时自动放大 */
+  .auth-gate{padding:12px}
+  .auth-card{padding:20px 18px}
+}
+
+/* 更窄的屏幕上，证书文件表只保留文件名与操作，避免下载按钮被挤出屏幕 */
+@media(max-width:600px){
+  #filetable{min-width:0}
+  #filetable th:nth-child(2),#filetable th:nth-child(3),#filetable th:nth-child(4),
+  #filetable td:nth-child(2),#filetable td:nth-child(3),#filetable td:nth-child(4){display:none}
+  #filetable th,#filetable td{padding-left:6px;padding-right:6px}
+  #filetable td code{white-space:normal;word-break:break-all}
+  #filetable td:last-child{width:1%;white-space:nowrap;text-align:right}
+  #filetable td:last-child .btn{padding:6px 10px}
+}
+
+/* 小屏手机：标签栏压缩到一行显示完整，卡片改为单列 */
+@media(max-width:380px){
+  .tab{padding:8px 9px;font-size:12.5px}
+  .cards{grid-template-columns:1fr}
+}

@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-var Version = "1.0.0"
+var Version = "1.0.1"
 
 func detectPaths() Paths {
 	cwd, _ := os.Getwd()

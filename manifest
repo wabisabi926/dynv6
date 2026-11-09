@@ -1,5 +1,5 @@
 appname=dynv6
-version=1.0.0
+version=1.0.1
 display_name=Dynv6 管家
 desc=dynv6 动态域名（DDNS）更新 + Let's Encrypt 证书自动签发续期：导出 PEM、Emby PFX、Plex P12，路径与文件名全部可自定义。
 source=thirdparty
@@ -18,4 +18,4 @@ service_data_dir=/app_data/dynv6/data
 service_log_dir=/app_data/dynv6/logs
 service_run_dir=/app_data/dynv6/run
 share_dirs=/vol1,/vol2,/vol3,/vol4,/volume1,/volume2,/volume3,/volume4,/mnt/user,/mnt/ssd,/mnt/cache,/share,/public,/home
-changelog=1.0.0 首个公开发布版本，包含 DDNS 自动更新、证书签发续期与证书分发完整链路。
+changelog=1.0.1 新图标与移动端适配。

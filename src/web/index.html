@@ -51,10 +51,10 @@
       </div>
       <p class="hint">「立即签发」与「强制续期」会真实调用 Let's Encrypt，请勿频繁点击；调试请先把证书机构切到测试环境。</p>
       <h2>当前路径 <span id="env-pill" class="pill">—</span></h2>
-      <table class="kv"><tbody id="paths"></tbody></table>
+      <div class="table-wrap"><table class="kv"><tbody id="paths"></tbody></table></div>
       <p id="auth-paths" class="hint hidden"></p>
       <h2>最近任务</h2>
-      <table class="list"><thead><tr><th>时间</th><th>任务</th><th>结果</th><th>说明</th></tr></thead><tbody id="tasklist"></tbody></table>
+      <div class="table-wrap"><table class="list"><thead><tr><th>时间</th><th>任务</th><th>结果</th><th>说明</th></tr></thead><tbody id="tasklist"></tbody></table></div>
     </section>
 
     <section id="tab-settings" class="panel">
@@ -149,7 +149,7 @@
 
     <section id="tab-certs" class="panel">
       <div class="savebar"><span>主输出目录中的证书文件 <code id="cert-dir"></code></span><button class="btn ghost" onclick="loadFiles()">刷新</button></div>
-      <table class="list"><thead><tr><th>文件名</th><th>大小</th><th>修改时间</th><th>用途</th><th>操作</th></tr></thead><tbody id="filelist"></tbody></table>
+      <div class="table-wrap"><table class="list" id="filetable"><thead><tr><th>文件名</th><th>大小</th><th>修改时间</th><th>用途</th><th>操作</th></tr></thead><tbody id="filelist"></tbody></table></div>
       <p class="hint">fullchain.crt 用于飞牛后台「证书文件」上传，.key 用于「私钥文件」；.pfx 给 Emby，.p12 给 Plex。</p>
     </section>
 
