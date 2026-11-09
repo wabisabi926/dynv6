@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # dynv6 管家 Docker 镜像：监听 0.0.0.0:8092，数据统一放在 /data
-FROM golang:1.23-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY src/go.mod src/go.sum ./
 RUN go mod download
