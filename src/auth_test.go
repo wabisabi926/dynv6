@@ -127,3 +127,37 @@ func TestCSRFGate(t *testing.T) {
 		t.Fatalf("缺少 X-Requested-With 应 403，得到 %d", rec.Code)
 	}
 }
+
+// 飞牛 App 内置 WebView 会发送 Origin: null 或省略 Origin，不能因此拦截正常操作。
+func TestCheckCSRFAllowsWebViewOrigin(t *testing.T) {
+	a := newLocalTestApp()
+	cases := []struct {
+		name   string
+		origin string
+		site   string
+		with   string
+		want   bool
+	}{
+		{"WebView Origin null", "null", "cross-site", "dynv6", true},
+		{"省略 Origin", "", "", "dynv6", true},
+		{"同源页面", "http://127.0.0.1:8092", "same-origin", "dynv6", true},
+		{"网关改写 Host", "https://fnos.example.com", "same-origin", "dynv6", true},
+		{"跨站请求", "https://evil.example.com", "cross-site", "dynv6", false},
+		{"缺少自定义头", "null", "", "", false},
+	}
+	for _, c := range cases {
+		req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8092/api/config", nil)
+		if c.origin != "" {
+			req.Header.Set("Origin", c.origin)
+		}
+		if c.site != "" {
+			req.Header.Set("Sec-Fetch-Site", c.site)
+		}
+		if c.with != "" {
+			req.Header.Set("X-Requested-With", c.with)
+		}
+		if got := a.checkCSRF(req); got != c.want {
+			t.Errorf("%s: checkCSRF=%v，期望 %v", c.name, got, c.want)
+		}
+	}
+}

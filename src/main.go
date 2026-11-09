@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-var Version = "1.0.1"
+var Version = "1.0.2"
 
 func detectPaths() Paths {
 	cwd, _ := os.Getwd()
@@ -232,27 +232,31 @@ func (a *App) localRequestAllowed(w http.ResponseWriter, r *http.Request) bool {
 }
 
 // checkCSRF 拦截跨站 POST；前端 fetch 会带 X-Requested-With，命令行可用 Bearer。
+// 飞牛 App 内置 WebView 与 file:// 页面会发送 Origin: null 或省略 Origin，此时无法做同源比对，
+// 仅依赖自定义头：跨站表单无法设置该头，跨站 fetch 会被浏览器的 CORS 预检拦截。
 func (a *App) checkCSRF(r *http.Request) bool {
 	if r.Method != http.MethodPost {
 		return true
 	}
-	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
-		return false
-	}
-	if origin := r.Header.Get("Origin"); origin != "" {
-		u, err := neturl.Parse(origin)
-		if err != nil || u.Host == "" {
-			return false
-		}
-		fwd := r.Header.Get("X-Forwarded-Host")
-		if !strings.EqualFold(u.Host, r.Host) && (fwd == "" || !strings.EqualFold(u.Host, fwd)) {
-			return false
-		}
-	}
 	if r.Header.Get("X-Requested-With") != "dynv6" && !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
 		return false
 	}
-	return true
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" || strings.EqualFold(origin, "null") {
+		return true
+	}
+	u, err := neturl.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	fwd := r.Header.Get("X-Forwarded-Host")
+	if strings.EqualFold(u.Host, r.Host) || (fwd != "" && strings.EqualFold(u.Host, fwd)) {
+		return true
+	}
+	// 飞牛网关可能改写 Host 且不传 X-Forwarded-Host，此时以浏览器的同源判定为准；
+	// 真正的跨站请求会带 Sec-Fetch-Site: cross-site。
+	site := r.Header.Get("Sec-Fetch-Site")
+	return site == "same-origin" || site == "none"
 }
 
 func existingDynv6(port string) bool {

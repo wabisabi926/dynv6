@@ -54,6 +54,22 @@
             }
           },
           "updated_at": "2026-11-09T15:42:18+00:00"
+        },
+        "1.0.2": {
+          "changelog": "修复飞牛 App 内打开时请求被来源校验拦截的问题。",
+          "packages": {
+            "x86": {
+              "sha256": "c167cc6a668033b5a33c0350d297433e65f735f722218f41251d17fc4e0519c9",
+              "size": 3665745,
+              "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.2/dynv6_1.0.2_x86.fpk"
+            },
+            "arm": {
+              "sha256": "3c07844e2b1f4dcd92eba6a2b2dbbce3f5f617a33cb3a714cdd12efa333029a4",
+              "size": 3309286,
+              "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.2/dynv6_1.0.2_arm.fpk"
+            }
+          },
+          "updated_at": "2026-11-09T23:56:17+08:00"
         }
       }
     }
