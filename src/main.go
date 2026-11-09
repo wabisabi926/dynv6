@@ -63,7 +63,11 @@ func detectPaths() Paths {
 		listen = "0.0.0.0:8092"
 	}
 	if listen == "" && os.Getenv("TRIM_APPDEST") != "" {
-		listen = "0.0.0.0:8092"
+		fnosPort := strings.TrimSpace(os.Getenv("DYNV6_PORT"))
+		if fnosPort == "" {
+			fnosPort = "8092"
+		}
+		listen = "0.0.0.0:" + fnosPort
 	}
 	devPort := strings.TrimSpace(os.Getenv("DYNV6_DEV_PORT"))
 	if devPort == "" && listen == "" {
@@ -330,12 +334,18 @@ func main() {
 			a.log("端口 %s 被其他程序占用，请设置 DYNV6_DEV_PORT 或关闭占用程序", p.DevPort)
 			os.Exit(1)
 		}
+		if p.Listen != "" && os.Getenv("TRIM_APPDEST") != "" {
+			if _, port, splitErr := net.SplitHostPort(p.Listen); splitErr == nil && existingDynv6(port) {
+				a.log("端口 %s 已有 dynv6 实例在运行，本次不再重复启动", port)
+				return
+			}
+		}
 		a.log("监听失败（%s）: %v；如果提示端口被占用，请停止占用该端口的进程或改用 DYNV6_LISTEN 指定其他地址", p.Listen, err)
 		os.Exit(1)
 	}
 	if p.Listen != "" {
 		if os.Getenv("TRIM_APPDEST") != "" {
-			a.log("飞牛模式：监听 %s（固定端口 8092，由飞牛网关反向代理）", p.Listen)
+			a.log("飞牛模式：监听 %s（由飞牛网关反向代理）", p.Listen)
 		} else {
 			a.log("服务模式：监听 %s（Docker / 反向代理），请通过该地址访问并创建或登录管理员账号", p.Listen)
 		}

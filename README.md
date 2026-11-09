@@ -84,6 +84,27 @@ Windows / Linux / Docker 首次进入需创建管理员账号；飞牛环境由�
 - 忘记密码：停止应用，删除数据目录下的 `admin.json`，重启后重新初始化。
 - 如果 `admin.json` 损坏或不可读，应用会锁定初始化并提示人工处理，避免被他人重新接管。
 
+## 常见问题
+
+### 提示端口被占用
+
+应用升级或卸载时会自动清理旧实例。如果仍提示占用，请在飞牛 SSH 中确认占用者：
+
+```bash
+sudo ss -ltnp | grep 8092
+sudo ps -eo pid,args | grep '/dynv6/bin/dynv6'
+```
+
+如果是旧版本残留进程，结束它后重启应用：
+
+```bash
+sudo pkill -f '/vol1/@appcenter/dynv6/bin/dynv6'
+```
+
+### 忘记管理员密码
+
+停止应用，删除数据目录下的 `admin.json`，重启后重新初始化。
+
 ## 构建
 
 需要 Go 1.21+ 与 Python 3.9+：

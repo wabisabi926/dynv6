@@ -17,6 +17,31 @@ export TRIM_APPDEST="$APP"
 export TRIM_PKGVAR="$VAR"
 export TRIM_PKGETC="$ETC"
 export TRIM_DATA_SHARE_PATHS="$SHARES"
+export DYNV6_PORT="$PORT"
+
+# 按绝对路径查找本应用的所有实例（包括升级前遗留、没有 PID 文件的旧进程）。
+# 旧版本 stop 时 PID 文件可能已随数据目录重建而丢失，导致进程残留并占住端口。
+pids_of_bin() {
+    ps -eo pid=,args= 2>/dev/null | awk -v bin="$BIN" '$2 == bin { print $1 }'
+}
+
+kill_orphans() {
+    pids=$(pids_of_bin)
+    [ -n "$pids" ] || return 0
+    for p in $pids; do
+        kill -TERM "$p" 2>/dev/null || true
+    done
+    i=0
+    while [ -n "$(pids_of_bin)" ] && [ "$i" -lt 20 ]; do
+        sleep 0.25
+        i=$((i + 1))
+    done
+    for p in $(pids_of_bin); do
+        kill -KILL "$p" 2>/dev/null || true
+    done
+    sleep 0.2
+    return 0
+}
 
 port_open() {
     (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null
@@ -45,6 +70,8 @@ start() {
         echo "找不到可执行文件 $BIN，请确认安装包架构与设备一致" > "$ERRLOG"
         return 1
     fi
+    # 清理升级/卸载遗留的旧实例，避免多个版本同时占用不同端口
+    kill_orphans
     rm -f "$PID_FILE"
     # 日志超过 5MB 时保留一份旧日志，避免长期运行无限增长
     if [ -f "$LOG" ] && [ "$(wc -c < "$LOG" 2>/dev/null || echo 0)" -gt 5242880 ]; then
@@ -80,6 +107,8 @@ stop() {
         done
         running && kill -KILL "$pid" 2>/dev/null || true
     fi
+    # PID 文件缺失或被重建时也能停掉旧实例
+    kill_orphans
     rm -f "$PID_FILE"
     return 0
 }
@@ -89,7 +118,7 @@ case "${1:-}" in
     stop)    stop ;;
     restart) stop; start ;;
     status)
-        if running && port_open; then
+        if running || [ -n "$(pids_of_bin)" ]; then
             exit 0
         fi
         exit 3

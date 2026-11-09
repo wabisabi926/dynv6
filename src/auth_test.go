@@ -68,6 +68,10 @@ func TestFnosUsesServicePort(t *testing.T) {
 	if p.Listen != "0.0.0.0:8092" || p.DevPort != "" {
 		t.Fatalf("飞牛应使用 8092 端口模式，得到 Listen=%q DevPort=%q", p.Listen, p.DevPort)
 	}
+	t.Setenv("DYNV6_PORT", "18092")
+	if p := detectPaths(); p.Listen != "0.0.0.0:18092" {
+		t.Fatalf("DYNV6_PORT 应覆盖飞牛端口，得到 %q", p.Listen)
+	}
 }
 
 func TestLocalAuthGate(t *testing.T) {
