@@ -1,0 +1,46 @@
+# 构建产物
+build/
+dist/
+*.fpk
+*.tgz
+*.exe
+
+# 旧项目名的整目录副本（构建只使用根目录 src/app 等）
+dynv6/
+
+# 本地工具记录
+.workbuddy-ai/
+.workbuddy/
+.screenshots/
+.trae/
+
+# 运行期数据与凭据（绝对不能提交）
+admin.json
+config.json
+*.log
+*.out
+*.pfx
+*.p12
+*.pem
+*.key
+*.jks
+*.keystore
+*.crt
+.env
+.env.*
+.dev/
+etc/
+data/
+release_notes.md
+
+# Windows 图标资源由 build.py 生成，不入库
+src/rsrc_windows_amd64.syso
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# Go / 编辑器临时文件
+*.exe~
+*.test
+coverage.out

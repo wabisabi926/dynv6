@@ -1,0 +1,24 @@
+#!/bin/bash
+# 卸载后清理：用户在向导中关闭「保留数据」时才删除应用数据
+set -u
+VAR="${TRIM_PKGVAR:-}"
+ETC="${TRIM_PKGETC:-}"
+KEEP="${wizard_keep_data:-true}"
+
+safe_rm() {
+    p="$1"
+    case "$p" in
+        /var/apps/dynv6*|/vol*/@appdata/dynv6*|/vol*/@appconf/dynv6*|/vol*/@appstore/dynv6*)
+            rm -rf "$p" 2>/dev/null || true
+            ;;
+        *)
+            echo "跳过不安全的清理路径: $p" >&2
+            ;;
+    esac
+}
+
+if [ "$KEEP" = "false" ] || [ "$KEEP" = "0" ]; then
+    [ -n "$VAR" ] && safe_rm "$VAR"
+    [ -n "$ETC" ] && safe_rm "$ETC"
+fi
+exit 0

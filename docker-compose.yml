@@ -1,0 +1,25 @@
+services:
+  dynv6:
+    build:
+      context: .
+      args:
+        VERSION: dev
+    image: ghcr.io/wabisabi926/dynv6:latest
+    container_name: dynv6
+    restart: unless-stopped
+    ports:
+      # 宿主机端口:容器端口；如只在本机反向代理后使用，可改为 "127.0.0.1:6000:6000"
+      - "6000:6000"
+    environment:
+      TZ: Asia/Shanghai
+      # 默认 DYNV6_DOCKER=1 监听 0.0.0.0:6000；需要改端口时取消注释
+      # DYNV6_LISTEN: 0.0.0.0:6000
+    volumes:
+      # 配置、状态、admin.json、证书都在这里，请做好备份
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:6000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

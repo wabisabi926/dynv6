@@ -1,0 +1,8 @@
+#!/bin/bash
+# 安装后初始化：建立目录并收紧权限（配置内含 Token 与密码）
+set -u
+VAR="${TRIM_PKGVAR:-}"
+ETC="${TRIM_PKGETC:-}"
+[ -n "$VAR" ] && mkdir -p "$VAR" && chmod 700 "$VAR"
+[ -n "$ETC" ] && mkdir -p "$ETC" && chmod 700 "$ETC"
+exit 0

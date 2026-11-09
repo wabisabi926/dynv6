@@ -1,0 +1,8 @@
+#!/bin/bash
+# 升级后：目录权限收敛，服务由平台重新启动
+set -u
+VAR="${TRIM_PKGVAR:-}"
+ETC="${TRIM_PKGETC:-}"
+[ -n "$VAR" ] && chmod 700 "$VAR" 2>/dev/null || true
+[ -n "$ETC" ] && chmod 700 "$ETC" 2>/dev/null || true
+exit 0

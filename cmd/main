@@ -1,0 +1,102 @@
+#!/bin/bash
+# dynv6 服务管理：start / stop / restart / status
+set -u
+
+APP="${TRIM_APPDEST:-/var/apps/dynv6/target}"
+VAR="${TRIM_PKGVAR:-$APP/var}"
+ETC="${TRIM_PKGETC:-$APP/etc}"
+SHARES="${TRIM_DATA_SHARE_PATHS:-}"
+PORT="${DYNV6_PORT:-6000}"
+BIN="$APP/bin/dynv6"
+PID_FILE="$VAR/dynv6.pid"
+LOG="$VAR/dynv6.log"
+ERRLOG="${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+
+mkdir -p "$VAR" "$ETC"
+export TRIM_APPDEST="$APP"
+export TRIM_PKGVAR="$VAR"
+export TRIM_PKGETC="$ETC"
+export TRIM_DATA_SHARE_PATHS="$SHARES"
+
+port_open() {
+    (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null
+}
+
+running() {
+    [ -f "$PID_FILE" ] || return 1
+    pid=$(cat "$PID_FILE" 2>/dev/null) || return 1
+    [ -n "$pid" ] || return 1
+    kill -0 "$pid" 2>/dev/null || { rm -f "$PID_FILE"; return 1; }
+    # 避免 PID 复用把无关进程当成应用
+    if [ -r "/proc/$pid/cmdline" ]; then
+        if ! tr '\0' ' ' < "/proc/$pid/cmdline" | grep -q "dynv6"; then
+            rm -f "$PID_FILE"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+start() {
+    if running; then
+        return 0
+    fi
+    if [ ! -x "$BIN" ]; then
+        echo "找不到可执行文件 $BIN，请确认安装包架构与设备一致" > "$ERRLOG"
+        return 1
+    fi
+    rm -f "$PID_FILE"
+    # 日志超过 5MB 时保留一份旧日志，避免长期运行无限增长
+    if [ -f "$LOG" ] && [ "$(wc -c < "$LOG" 2>/dev/null || echo 0)" -gt 5242880 ]; then
+        mv -f "$LOG" "$LOG.1" 2>/dev/null || true
+    fi
+    # 日志由应用自身写入 $LOG 并轮转；这里不再重定向 stdout，避免重复写同一文件
+    nohup "$BIN" >>/dev/null 2>&1 &
+    echo $! > "$PID_FILE"
+    i=0
+    while [ "$i" -lt 40 ]; do
+        if port_open; then
+            return 0
+        fi
+        if ! running; then
+            echo "服务进程退出，请查看日志 $LOG" > "$ERRLOG"
+            return 1
+        fi
+        sleep 0.25
+        i=$((i + 1))
+    done
+    echo "服务启动超时（端口 $PORT），请查看日志 $LOG" > "$ERRLOG"
+    return 1
+}
+
+stop() {
+    if running; then
+        pid=$(cat "$PID_FILE" 2>/dev/null)
+        kill -TERM "$pid" 2>/dev/null || true
+        i=0
+        while running && [ "$i" -lt 20 ]; do
+            sleep 0.25
+            i=$((i + 1))
+        done
+        running && kill -KILL "$pid" 2>/dev/null || true
+    fi
+    rm -f "$PID_FILE"
+    return 0
+}
+
+case "${1:-}" in
+    start)   start ;;
+    stop)    stop ;;
+    restart) stop; start ;;
+    status)
+        if running && port_open; then
+            exit 0
+        fi
+        exit 3
+        ;;
+    *)
+        echo "用法: main {start|stop|restart|status}" > "$ERRLOG"
+        exit 1
+        ;;
+esac
+exit $?

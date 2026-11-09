@@ -1,0 +1,9 @@
+#!/bin/bash
+# 升级前：备份配置，升级不丢数据
+set -u
+ETC="${TRIM_PKGETC:-}"
+VAR="${TRIM_PKGVAR:-}"
+if [ -n "$ETC" ] && [ -f "$ETC/config.json" ] && [ -n "$VAR" ]; then
+    cp -f "$ETC/config.json" "$VAR/config.json.bak" 2>/dev/null || true
+fi
+exit 0

@@ -1,0 +1,17 @@
+[
+  {
+    "stepTitle": "卸载 Dynv6 管家",
+    "items": [
+      {
+        "type": "switch",
+        "field": "wizard_keep_data",
+        "label": "保留配置、证书与日志",
+        "initValue": "true"
+      },
+      {
+        "type": "tips",
+        "helpText": "关闭开关会一并删除应用数据目录内的配置、日志与已生成证书；共享目录中的证书文件不会被删除。"
+      }
+    ]
+  }
+]

@@ -1,0 +1,10 @@
+#!/bin/bash
+# 安装前检查：只依赖系统自带命令，不需要 root
+set -u
+ERRLOG="${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+for c in openssl curl; do
+    if ! command -v "$c" >/dev/null 2>&1; then
+        echo "警告：系统缺少 $c，证书签发/转换可能不可用；DDNS 与分发仍可工作" > "$ERRLOG"
+    fi
+done
+exit 0

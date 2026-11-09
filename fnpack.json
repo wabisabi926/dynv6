@@ -1,0 +1,45 @@
+{
+  "schema_version": "2",
+  "source_info": {
+    "name": "dynv6 应用源",
+    "author": "wabisabi926",
+    "description": "dynv6 动态域名更新与 SSL 证书自动续期"
+  },
+  "apps": {
+    "dynv6": {
+      "display_name": "Dynv6 管家",
+      "desc": "dynv6 动态域名更新 + Let's Encrypt 证书自动签发续期，导出 PEM、Emby PFX、Plex P12，路径全部可自定义；不申请 root 权限。",
+      "platform": [
+        "x86",
+        "arm"
+      ],
+      "categories": [
+        "系统工具"
+      ],
+      "icon_url": "https://raw.githubusercontent.com/wabisabi926/dynv6/main/ICON_256.PNG",
+      "maintainer": "wabisabi926",
+      "run_as": "package",
+      "install_type": "",
+      "is_docker": false,
+      "service_port": "",
+      "releases": {
+        "1.0.0": {
+          "changelog": "首个公开发布版本，包含 DDNS 自动更新、证书签发续期与证书分发完整链路。",
+          "updated_at": "2026-11-09T19:55:55+08:00",
+          "packages": {
+            "x86": {
+              "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.0/dynv6_1.0.0_x86.fpk",
+              "sha256": "f3bf2a97646726c02ebf2e79ab0af29c8f3f5323b47d12f62d6ce905c7b34cf5",
+              "size": 3484098
+            },
+            "arm": {
+              "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.0/dynv6_1.0.0_arm.fpk",
+              "sha256": "83359ea43184a9a07b7560d95e96edb2a92062ac91027db7ae3e596fe1d50477",
+              "size": 3183761
+            }
+          }
+        }
+      }
+    }
+  }
+}

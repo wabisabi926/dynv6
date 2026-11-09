@@ -1,0 +1,202 @@
+# 发布 Windows 独立二进制 + 飞牛 fnOS 安装包（x86 / arm）
+#
+# 触发方式：
+#   1. 推送 v* tag（例如 v1.0.1）：git tag v1.0.1 && git push origin v1.0.1
+#   2. Actions 页面手动运行，填写已存在的 tag
+#
+# 发布前必须在 .changes/v<版本>.md 写好中文更新日志，否则 release.py 会直接失败。
+#
+# 发布内容（白名单）：
+#   - dynv6_<版本>_x86.fpk      飞牛 fnOS x86_64（官方 fnpack 1.2.1 构建）
+#   - dynv6_<版本>_arm.fpk      飞牛 fnOS ARM64（官方 fnpack 1.2.1 构建）
+#   - dynv6_<版本>_windows.exe  Windows 10/11 x64 免安装
+#   - dynv6_<版本>_linux_amd64 / _linux_arm64  Linux 独立二进制
+#   - SHA256SUMS.txt            校验和
+#   - build/release_notes.md    中文 Release 说明（含安装与校验步骤）
+#   - ghcr.io/<owner>/dynv6:latest 与 :<版本>  Docker 多架构镜像（amd64/arm64）
+#
+# 不会进入安装包的内容：本地 config.json（Token/邮箱）、admin.json（管理员密码）、
+# 证书与私钥（pfx/p12/pem/key）、日志、构建缓存、测试与开发文件。
+# release.py 会在构建前扫描仓库并校验 fpk 内容，发现敏感信息直接中止。
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "发布 tag（如 v1.0.1，必须已有 .changes/v1.0.1.md）"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  # 先跑 vet / test，任何失败都不进入打包，避免把坏版本发出去
+  verify:
+    name: 校验（go vet / go test）
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v5
+
+      - name: 安装 Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: src/go.mod
+          cache-dependency-path: src/go.sum
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -count=1 -timeout=10m
+
+  release:
+    name: 构建并发布
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v5
+
+      - name: 安装 Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: src/go.mod
+          cache-dependency-path: src/go.sum
+
+      # 飞牛官方打包工具；找不到时 build.py 会退回内置打包（格式一致）
+      - name: 安装 fnpack（飞牛官方打包工具）
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fSL --retry 3 https://static2.fnnas.com/fnpack/fnpack-1.2.1-linux-amd64 -o "$HOME/.local/bin/fnpack"
+          chmod +x "$HOME/.local/bin/fnpack"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/fnpack" --help >/dev/null
+          echo "fnpack: $("$HOME/.local/bin/fnpack" --version 2>/dev/null || echo 1.2.1)"
+
+      # rsrc 用于把 assets/dynv6.ico 写进 Windows exe；固定版本避免 @latest 漂移
+      - name: 安装 rsrc（Windows 图标资源）
+        run: |
+          go install github.com/akavel/rsrc@v0.10.2
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: 构建 Windows / 飞牛安装包并生成中文更新日志
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          python3 scripts/release.py \
+            --version "$VERSION" \
+            --tag "$RELEASE_TAG" \
+            --notes-out build/release_notes.md
+
+      - name: 产物清单
+        run: |
+          ls -lh dist/
+          echo "---- SHA256 ----"
+          cat dist/SHA256SUMS.txt
+
+      - name: 保存构建产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: dynv6-${{ env.RELEASE_TAG }}
+          path: dist/*
+          retention-days: 7
+
+      - name: 创建或更新 GitHub Release（中文说明 + 全部产物）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="$RELEASE_TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "Dynv6 管家 $TAG" --notes-file build/release_notes.md
+          else
+            gh release create "$TAG" --title "Dynv6 管家 $TAG" --notes-file build/release_notes.md
+          fi
+          find dist -maxdepth 1 -type f -print0 | xargs -0 -I{} gh release upload "$TAG" "{}" --clobber
+          gh release view "$TAG"
+
+      # fnpack.json 是外部应用源清单，sha256/size 必须与本 tag 的实际产物一致。
+      # 构建步骤已重新生成，这里回写 main；分支保护导致失败时不阻断发布。
+      - name: 回写 fnpack.json 到 main
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cp fnpack.json /tmp/fnpack.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          cp /tmp/fnpack.json fnpack.json
+          if git diff --quiet fnpack.json; then
+            echo "fnpack.json 无变化"
+            exit 0
+          fi
+          git add fnpack.json
+          git commit -m "chore: 同步 ${RELEASE_TAG} 安装包哈希"
+          git push origin main
+
+  # Docker 镜像：多架构推送到 GHCR，容器内默认监听 0.0.0.0:6000 并强制管理员登录
+  docker:
+    name: 构建并推送 Docker 镜像
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v5
+
+      - name: 计算版本
+        run: echo "VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+
+      - name: 设置 QEMU（多架构）
+        uses: docker/setup-qemu-action@v3
+
+      - name: 设置 Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 生成镜像标签
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ env.VERSION }}
+
+      - name: 构建并推送
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: VERSION=${{ env.VERSION }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

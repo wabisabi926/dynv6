@@ -1,0 +1,16 @@
+appname=dynv6
+version=1.0.0
+display_name=Dynv6 管家
+desc=dynv6 动态域名（DDNS）更新 + Let's Encrypt 证书自动签发续期：导出 PEM、Emby PFX、Plex P12，路径与文件名全部可自定义。
+source=thirdparty
+platform=x86
+maintainer=wabisabi926
+maintainer_url=https://github.com/wabisabi926/dynv6
+distributor=wabisabi926
+helpurl=https://github.com/wabisabi926/dynv6
+desktop_uidir=ui
+desktop_applaunchname=dynv6.Application
+ctl_stop=true
+checkport=true
+service_port=6000
+changelog=1.0.0 首个公开发布版本，包含 DDNS 自动更新、证书签发续期与证书分发完整链路。

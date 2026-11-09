@@ -1,0 +1,8 @@
+#!/bin/bash
+# 配置变更后重启服务以加载向导环境变量
+set -u
+MAIN="$(dirname "$0")/main"
+if [ -x "$MAIN" ]; then
+    "$MAIN" restart || true
+fi
+exit 0
