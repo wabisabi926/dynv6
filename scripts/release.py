@@ -21,7 +21,6 @@ CHANGES = os.path.join(ROOT, ".changes")
 FPK_TOP_ALLOWED = re.compile(
     r"^(?:manifest|app\.tgz|ICON\.PNG|ICON_256\.PNG|(?:cmd|config|wizard)(?:/.*)?)$"
 )
-APP_ALLOWED = re.compile(r"^(?:bin/dynv6|ui(?:/.*)?)$")
 FORBIDDEN = re.compile(
     r"(?:^|/)(?:admin\.json|config\.json|\.env(?:\..*)?)$"
     r"|\.(?:pfx|p12|pem|key|jks|keystore|log|crt)$"
@@ -98,21 +97,33 @@ def run_build(base_url):
     subprocess.run(cmd, cwd=ROOT, check=True)
 
 
+def norm(name):
+    while name.startswith("./"):
+        name = name[2:]
+    return name.rstrip("/")
+
+
 def check_fpk(path, version):
     with tarfile.open(path, "r:*") as tar:
-        names = tar.getnames()
+        members = [m for m in tar.getmembers() if not m.isdir() and norm(m.name)]
+        names = {norm(m.name) for m in members}
         for name in names:
             if not FPK_TOP_ALLOWED.match(name):
                 raise SystemExit("%s 顶层多余文件: %s" % (path, name))
         if "manifest" not in names or "app.tgz" not in names:
             raise SystemExit("%s 缺少 manifest 或 app.tgz" % path)
-        text = tar.extractfile("manifest").read().decode("utf-8", "ignore")
+        manifest = next(m for m in members if norm(m.name) == "manifest")
+        text = tar.extractfile(manifest).read().decode("utf-8", "ignore")
         if "version=%s" % version not in text:
             raise SystemExit("%s 版本号不是 %s" % (path, version))
-        with tarfile.open(fileobj=tar.extractfile("app.tgz"), mode="r:*") as app:
-            for name in app.getnames():
-                if not APP_ALLOWED.match(name):
-                    raise SystemExit("%s app.tgz 多余文件: %s" % (path, name))
+        app_member = next(m for m in members if norm(m.name) == "app.tgz")
+        with tarfile.open(fileobj=tar.extractfile(app_member), mode="r:*") as app:
+            for m in app.getmembers():
+                if m.isdir():
+                    continue
+                name = norm(m.name)
+                if not name:
+                    continue
                 if FORBIDDEN.search(name):
                     raise SystemExit("%s app.tgz 包含禁止文件: %s" % (path, name))
 
