@@ -40,20 +40,20 @@
           }
         },
         "1.0.1": {
-          "changelog": "应用图标重绘、Web UI 响应式适配，修复飞牛 App 内请求来源校验。",
+          "changelog": "应用图标重绘：深蓝底、青色盾牌与镂空 d6 标识，导出 16–256 px 全尺寸，飞牛、Windows 与 Web UI 共用。",
           "packages": {
             "x86": {
-              "sha256": "61f2a94bf0113d8b79d08f9eb84f40c05df1d3f022b8aab0b84b4b4ea6d64f52",
-              "size": 3665821,
+              "sha256": "fb6e7d09d81eebd3d3d97157d8ce63b05afe0599d16f3562df8f9bee5d7aa4da",
+              "size": 3655546,
               "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.1/dynv6_1.0.1_x86.fpk"
             },
             "arm": {
-              "sha256": "05871cf839930980ab7dc2c73dea0326d68d726f223209c40d62096fdebada39",
-              "size": 3309333,
+              "sha256": "98c94a5bf82fce8daa2f10e322d202d3aba7ed70b4e4f68f7913d65a60baf5b6",
+              "size": 3335962,
               "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.1/dynv6_1.0.1_arm.fpk"
             }
           },
-          "updated_at": "2026-11-10T00:02:33+08:00"
+          "updated_at": "2026-11-09T16:19:41+00:00"
         }
       }
     }
