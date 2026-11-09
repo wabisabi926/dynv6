@@ -12,5 +12,5 @@ desktop_uidir=ui
 desktop_applaunchname=dynv6.Application
 ctl_stop=true
 checkport=true
-service_port=6000
+service_port=6010
 changelog=1.0.0 首个公开发布版本，包含 DDNS 自动更新、证书签发续期与证书分发完整链路。

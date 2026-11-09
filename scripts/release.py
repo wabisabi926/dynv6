@@ -339,30 +339,30 @@ def render_notes(version, tag, changelog, artifacts):
 
 1. x86_64 设备下载 `_x86.fpk`，ARM 设备下载 `_arm.fpk`；
 2. 飞牛「应用中心 → 手动安装」，选择下载的 fpk；
-3. 打开应用即可使用。飞牛版本固定使用 6000 端口，由飞牛网关反向代理，**不需要开放端口或做端口映射**；直连或非网关入口首次进入需创建管理员账号。
+3. 打开应用即可使用。飞牛版本固定使用 6010 端口，由飞牛网关反向代理，**不需要开放端口或做端口映射**；直连或非网关入口首次进入需创建管理员账号。
 
 **Windows**
 
 1. 下载 `_windows.exe`，放到任意有写权限的目录双击运行（无控制台窗口）；
-2. 托盘图标右键「打开界面」，默认地址为 `http://127.0.0.1:6000/`；
+2. 托盘图标右键「打开界面」，默认地址为 `http://127.0.0.1:6010/`；
 3. 首次进入设置管理员用户名和密码，密码使用 PBKDF2-SHA256 加盐存储，仅保存在本机数据目录。
 
 **Linux 独立二进制**
 
 ```bash
 chmod +x dynv6_%(version)s_linux_amd64
-./dynv6_%(version)s_linux_amd64    # 默认监听 127.0.0.1:6000
+./dynv6_%(version)s_linux_amd64    # 默认监听 127.0.0.1:6010
 ```
 
 **Docker**
 
 ```bash
 docker run -d --name dynv6 --restart unless-stopped \\
-  -p 6000:6000 -v ./data:/data ghcr.io/wabisabi926/dynv6:%(version)s
+  -p 6010:6010 -v ./data:/data ghcr.io/wabisabi926/dynv6:%(version)s
 ```
 
-1. 浏览器访问 `http://宿主机IP:6000/`，首次进入创建管理员账号；
-2. 容器内默认监听 `0.0.0.0:6000`，所有 API 都需要管理员登录，公网使用建议前置 HTTPS 反向代理；
+1. 浏览器访问 `http://宿主机IP:6010/`，首次进入创建管理员账号；
+2. 容器内默认监听 `0.0.0.0:6010`，所有 API 都需要管理员登录，公网使用建议前置 HTTPS 反向代理；
 3. 配置、状态、`admin.json` 与证书都在挂载的 `/data`，请做好备份。
 
 ### 校验

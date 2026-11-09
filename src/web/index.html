@@ -186,16 +186,16 @@
       <ul>
         <li>应用以专用包用户运行，不申请 root，不修改系统定时任务，不改动飞牛系统目录。</li>
         <li>Token、邮箱、密码保存在 0600 权限的配置文件中，接口不回显，日志自动脱敏。</li>
-        <li>飞牛版本固定使用 6000 端口，由飞牛网关反向代理，不需要开放端口或做端口映射；Docker 用 <code>DYNV6_DOCKER=1</code> 或 <code>DYNV6_LISTEN</code> 监听所有网卡。</li>
-        <li>Windows / 通用 Linux 独立运行时默认监听 <code>127.0.0.1:6000</code>，使用一次性令牌 + Host/Origin 校验；Windows 请从托盘打开，不要直接访问裸端口。</li>
-        <li>Docker 部署默认监听 <code>0.0.0.0:6000</code>（<code>DYNV6_DOCKER=1</code> 或 <code>DYNV6_LISTEN</code>），通过映射端口访问，所有 API 都需要先登录管理员账号；公网访问建议在容器前加 HTTPS 反向代理。</li>
+        <li>飞牛版本固定使用 6010 端口，由飞牛网关反向代理，不需要开放端口或做端口映射；Docker 用 <code>DYNV6_DOCKER=1</code> 或 <code>DYNV6_LISTEN</code> 监听所有网卡。</li>
+        <li>Windows / 通用 Linux 独立运行时默认监听 <code>127.0.0.1:6010</code>，使用一次性令牌 + Host/Origin 校验；Windows 请从托盘打开，不要直接访问裸端口。</li>
+        <li>Docker 部署默认监听 <code>0.0.0.0:6010</code>（<code>DYNV6_DOCKER=1</code> 或 <code>DYNV6_LISTEN</code>），通过映射端口访问，所有 API 都需要先登录管理员账号；公网访问建议在容器前加 HTTPS 反向代理。</li>
         <li>自定义路径请指向已授权目录；分发前会做路径规范化与越界检查。</li>
         <li>主输出默认 0600；分发的 PEM 私钥固定 0600，PFX/P12 与证书 0644。</li>
       </ul>
       <h2>管理员账号</h2>
       <p>首次在 Windows / Docker / 通用 Linux 上打开界面时，会先进入初始化页面创建管理员用户名和密码。密码使用 PBKDF2-SHA256 加盐保存，不保存明文；登录后 7 天内有效。</p>
       <ul>
-        <li>飞牛环境由统一网关注入身份，不需要本地管理员账号；应用本身固定监听 6000 端口，由网关反向代理。本地账号主要用于 Windows / Docker / 通用 Linux（默认 6000 端口）。</li>
+        <li>飞牛环境由统一网关注入身份，不需要本地管理员账号；应用本身固定监听 6010 端口，由网关反向代理。本地账号主要用于 Windows / Docker / 通用 Linux（默认 6010 端口）。</li>
         <li>忘记密码：停止应用，删除数据目录下的 <code>admin.json</code>，重启后重新初始化。删除前请确认没有其他地方使用同一份数据目录。</li>
         <li>如果 <code>admin.json</code> 损坏或不可读，应用会锁定初始化并提示删除该文件，避免被他人重新接管。</li>
         <li>设置页「管理员账号」可以修改密码；修改后旧会话会全部失效，需要重新登录。</li>

@@ -154,7 +154,7 @@ jobs:
           git commit -m "chore: 同步 ${RELEASE_TAG} 安装包哈希"
           git push origin main
 
-  # Docker 镜像：多架构推送到 GHCR，容器内默认监听 0.0.0.0:6000 并强制管理员登录
+  # Docker 镜像：多架构推送到 GHCR，容器内默认监听 0.0.0.0:6010 并强制管理员登录
   docker:
     name: 构建并推送 Docker 镜像
     needs: verify

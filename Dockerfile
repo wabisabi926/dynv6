@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# dynv6 管家 Docker 镜像：监听 0.0.0.0:6000，数据统一放在 /data
+# dynv6 管家 Docker 镜像：监听 0.0.0.0:6010，数据统一放在 /data
 FROM golang:1.23-alpine AS build
 WORKDIR /src
 COPY src/go.mod src/go.sum ./
@@ -21,6 +21,6 @@ ENV DYNV6_DOCKER=1 \
 
 WORKDIR /data
 VOLUME ["/data"]
-EXPOSE 6000
+EXPOSE 6010
 
 ENTRYPOINT ["/usr/local/bin/dynv6"]

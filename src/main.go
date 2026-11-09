@@ -53,21 +53,21 @@ func detectPaths() Paths {
 	if len(shares) > 0 {
 		share = shares[0]
 	}
-	// 飞牛（TRIM_APPDEST 非空）与 faststrm 等第三方应用一致：manifest 声明 service_port=6000，
+	// 飞牛（TRIM_APPDEST 非空）与 faststrm 等第三方应用一致：manifest 声明 service_port=6010，
 	// 应用监听端口，由飞牛网关反向代理，不使用 Unix Socket。
-	// Windows/Linux 独立运行默认 6000，由一次性本地令牌保护。
-	// Docker / 反向代理部署用 DYNV6_LISTEN（如 0.0.0.0:6000）或 DYNV6_DOCKER=1 开启服务模式，
+	// Windows/Linux 独立运行默认 6010，由一次性本地令牌保护。
+	// Docker / 反向代理部署用 DYNV6_LISTEN（如 0.0.0.0:6010）或 DYNV6_DOCKER=1 开启服务模式，
 	// 此时不启用本地令牌，必须使用管理员账号登录。
 	listen := strings.TrimSpace(os.Getenv("DYNV6_LISTEN"))
 	if listen == "" && strings.EqualFold(strings.TrimSpace(os.Getenv("DYNV6_DOCKER")), "1") {
-		listen = "0.0.0.0:6000"
+		listen = "0.0.0.0:6010"
 	}
 	if listen == "" && os.Getenv("TRIM_APPDEST") != "" {
-		listen = "0.0.0.0:6000"
+		listen = "0.0.0.0:6010"
 	}
 	devPort := strings.TrimSpace(os.Getenv("DYNV6_DEV_PORT"))
 	if devPort == "" && listen == "" {
-		devPort = "6000"
+		devPort = "6010"
 	}
 	if listen != "" {
 		// 服务模式优先：避免同时设置 DYNV6_DEV_PORT 时误启用本地令牌
@@ -335,7 +335,7 @@ func main() {
 	}
 	if p.Listen != "" {
 		if os.Getenv("TRIM_APPDEST") != "" {
-			a.log("飞牛模式：监听 %s（固定端口 6000，由飞牛网关反向代理）", p.Listen)
+			a.log("飞牛模式：监听 %s（固定端口 6010，由飞牛网关反向代理）", p.Listen)
 		} else {
 			a.log("服务模式：监听 %s（Docker / 反向代理），请通过该地址访问并创建或登录管理员账号", p.Listen)
 		}

@@ -98,7 +98,7 @@ func demoDirs() map[string]any {
 func demoLogs() map[string]any {
 	return map[string]any{"ok": true, "lines": []string{
 		"[2026-11-09 11:20:01] dynv6 " + Version + " 启动（Windows 本地测试模式）",
-		"[2026-11-09 11:20:02] 服务已就绪，访问 http://127.0.0.1:6000/",
+		"[2026-11-09 11:20:02] 服务已就绪，访问 http://127.0.0.1:6010/",
 		"[2026-11-09 11:25:03] DDNS 更新成功 zone=example.dynv6.net ipv4=203.0.113.10 响应=updated",
 		"[2026-11-09 09:00:12] 证书检查：剩余 62 天（阈值 30 天）",
 		"[2026-10-12 03:14:02] 证书格式转换完成：PFX（Emby）与 P12（Plex）",
