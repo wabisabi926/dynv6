@@ -42,6 +42,8 @@ type dynv6DNS struct {
 	mu      sync.Mutex
 	zones   []dynv6Zone
 	created map[string][]createdTXT
+	cancel  <-chan struct{} // 任务取消信号，可中断 DNS 生效等待
+	store   *txtStore       // 持久化待清理的 TXT 记录，异常退出后可对账
 }
 
 func newDynv6DNS(token string, sleep time.Duration) *dynv6DNS {
@@ -171,8 +173,19 @@ func (d *dynv6DNS) Present(domain, token, keyAuth string) error {
 	d.mu.Lock()
 	d.created[fqdn] = append(d.created[fqdn], createdTXT{zoneID: zone.ID.String(), recordID: rec.ID.String()})
 	d.mu.Unlock()
+	if d.store != nil {
+		d.store.add(fqdn, zone.ID.String(), rec.ID.String())
+	}
 	if d.sleep > 0 {
-		time.Sleep(d.sleep)
+		if d.cancel == nil {
+			time.Sleep(d.sleep)
+		} else {
+			select {
+			case <-time.After(d.sleep):
+			case <-d.cancel:
+				return fmt.Errorf("任务已取消，跳过 DNS 生效等待")
+			}
+		}
 	}
 	return nil
 }
@@ -186,9 +199,27 @@ func (d *dynv6DNS) CleanUp(domain, token, keyAuth string) error {
 	delete(d.created, fqdn)
 	d.mu.Unlock()
 	var firstErr error
-	for _, rec := range records {
-		if _, err := d.do(http.MethodDelete, "/zones/"+rec.zoneID+"/records/"+rec.recordID, nil); err != nil && firstErr == nil {
-			firstErr = err
+	all := append([]createdTXT{}, records...)
+	if d.store != nil {
+		for _, p := range d.store.list(fqdn) {
+			all = append(all, createdTXT{zoneID: p.ZoneID, recordID: p.RecordID})
+		}
+	}
+	seen := map[string]bool{}
+	for _, rec := range all {
+		key := rec.zoneID + "|" + rec.recordID
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if _, err := d.do(http.MethodDelete, "/zones/"+rec.zoneID+"/records/"+rec.recordID, nil); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue // 删除失败时保留持久化记录，下次启动或 CleanUp 再试
+		}
+		if d.store != nil {
+			d.store.removeByID(fqdn, rec.zoneID, rec.recordID)
 		}
 	}
 	return firstErr

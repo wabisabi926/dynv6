@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/mail"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,13 @@ type Paths struct {
 	Listen string
 }
 
+// 内置探测源固定写在代码里，不接受用户自定义 URL，彻底消除 SSRF 面。
+// 多出口/VPN 环境请改用「手动指定 IP」，而不是改探测地址。
+const (
+	ipv4ProbeSources = "https://ip.3322.net,https://api.ipify.org,https://ipv4.icanhazip.com,https://checkip.amazonaws.com"
+	ipv6ProbeSources = "https://api6.ipify.org,https://ipv6.icanhazip.com"
+)
+
 func (a *App) defaultConfig() Config {
 	return Config{
 		Schema:          2,
@@ -94,11 +102,11 @@ func (a *App) defaultConfig() Config {
 		CertCheckHours:  12,
 		EnableIPv4:      true,
 		EnableIPv6:      false,
-		IPv4ProbeURL:    "https://ip.3322.net,https://api.ipify.org,https://ipv4.icanhazip.com,https://checkip.amazonaws.com",
-		IPv6ProbeURL:    "https://api6.ipify.org,https://ipv6.icanhazip.com",
+		IPv4ProbeURL:    ipv4ProbeSources,
+		IPv6ProbeURL:    ipv6ProbeSources,
 		IPv6Prefix:      false,
 		AcmeHome:        "${APPDATA}/acme",
-		OutputDir:       "${SHARE}",
+		OutputDir:       "${APPDATA}/certs",
 		BackupDir:       "${APPDATA}/backup",
 		FilePrefix:      "${DOMAIN}",
 		FileMode:        "0600",
@@ -150,11 +158,12 @@ func (a *App) normalize(c Config) Config {
 	c.Domain = strings.ToLower(strings.TrimSpace(c.Domain))
 	c.Token = strings.TrimSpace(c.Token)
 	c.Email = strings.TrimSpace(c.Email)
-	c.IPv4ProbeURL = strings.TrimSpace(c.IPv4ProbeURL)
-	c.IPv6ProbeURL = strings.TrimSpace(c.IPv6ProbeURL)
 	c.TGBotToken = strings.TrimSpace(c.TGBotToken)
 	c.TGChatID = strings.TrimSpace(c.TGChatID)
 	c.TGProxyURL = strings.TrimSpace(c.TGProxyURL)
+	// 探测地址固定为内置源，无论配置文件或 API 提交什么值都不采纳
+	c.IPv4ProbeURL = ipv4ProbeSources
+	c.IPv6ProbeURL = ipv6ProbeSources
 	c.IPv4Override = strings.TrimSpace(c.IPv4Override)
 	c.IPv6Override = strings.TrimSpace(c.IPv6Override)
 	c.CA = strings.TrimSpace(c.CA)
@@ -191,12 +200,6 @@ func (a *App) normalize(c Config) Config {
 	}
 	if c.CertCheckHours <= 0 {
 		c.CertCheckHours = d.CertCheckHours
-	}
-	if c.IPv4ProbeURL == "" || c.IPv4ProbeURL == "https://4.ipw.cn,https://api.ipify.org,https://ipv4.icanhazip.com,https://checkip.amazonaws.com" {
-		c.IPv4ProbeURL = d.IPv4ProbeURL
-	}
-	if c.IPv6ProbeURL == "" || c.IPv6ProbeURL == "https://6.ipw.cn,https://api6.ipify.org,https://ipv6.icanhazip.com" {
-		c.IPv6ProbeURL = d.IPv6ProbeURL
 	}
 	if c.AcmeHome == "" {
 		c.AcmeHome = d.AcmeHome
@@ -272,6 +275,13 @@ func (a *App) saveConfig(next Config) error {
 	if next.Email != "" {
 		if addr, err := mail.ParseAddress(next.Email); err != nil || addr.Address != next.Email {
 			return fmt.Errorf("邮箱格式不合法")
+		}
+	}
+	// 代理只接受常见协议，避免把未知 scheme 交给 http.Transport
+	if v := next.TGProxyURL; v != "" {
+		u, err := neturl.Parse(v)
+		if err != nil || u.Host == "" || !allowedProxyScheme(u.Scheme) {
+			return fmt.Errorf("Telegram 代理地址只支持 http / https / socks5 / socks5h")
 		}
 	}
 	old := a.cfg

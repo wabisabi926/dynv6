@@ -81,7 +81,7 @@
       <div class="grid">
         <label><span class="label-head">Bot Token <span id="tg_bot_token-state" class="field-state">未填写</span></span><div class="secret-row"><input type="password" data-k="tg_bot_token" autocomplete="new-password" placeholder="未设置"><button type="button" id="tg_bot_token-clear" class="btn ghost secret-clear hidden" onclick="clearSecret('tg_bot_token')">清除</button></div><small class="field-hint">@BotFather 创建 bot 后获得。</small></label>
         <label>Chat ID<input data-k="tg_chat_id" placeholder="123456789 或 -100..."></label>
-        <label>代理（可选）<input data-k="tg_proxy_url" placeholder="http://127.0.0.1:7890"></label>
+        <label>代理（可选）<input data-k="tg_proxy_url" placeholder="http://127.0.0.1:7890"><small class="field-hint">仅支持 http / https / socks5 / socks5h；若代理启用 TLS 中间人，可能看到 Bot Token，请只使用可信代理。</small></label>
       </div>
       <label class="check"><input type="checkbox" data-k="tg_enabled"> DDNS / 证书 / 分发结束时发送 Telegram 通知</label>
       <div class="actions"><button type="button" class="btn" onclick="testTG()">发送测试消息</button></div>
@@ -116,22 +116,21 @@
         <h2>DDNS</h2>
         <div class="grid">
           <label>检测间隔（分钟）<input type="number" data-k="ddns_interval_min"><small class="field-hint">默认 5 分钟；IP 变化频繁可调小。</small></label>
-          <label>IPv4 探测地址<input data-k="ipv4_probe_url" placeholder="多个地址用逗号分隔"><small class="field-hint">按顺序尝试，第一个成功即用。</small></label>
-          <label>IPv6 探测地址<input data-k="ipv6_probe_url" placeholder="多个地址用逗号分隔"></label>
         </div>
         <div class="grid">
           <label>手动指定 IPv4（可选）<input data-k="ipv4_override" placeholder="如 120.85.60.158"><small class="field-hint">多出口 / VPN 环境下自动探测可能拿到出口 IP；填了就不探测，清空恢复自动。</small></label>
           <label>手动指定 IPv6（可选）<input data-k="ipv6_override" placeholder="如 2408:8207::aaaa"></label>
         </div>
         <div class="wide"><button type="button" class="btn" onclick="testProbe()">测试 IP 探测</button><pre id="probe-result" class="logs hidden" style="max-height:180px;margin-top:8px"></pre></div>
+        <p class="hint">探测源为程序内置的 4 个公共服务（ip.3322.net / api.ipify.org / ipv4.icanhazip.com / checkip.amazonaws.com），按顺序自动回退，不接受自定义地址。如果各源结果不一致（常见于 VPN / 代理 / 多出口），请直接填写上面的「手动指定 IP」。</p>
         <label class="check"><input type="checkbox" data-k="auto_ddns"> 自动检测并更新 DDNS</label>
         <label class="check"><input type="checkbox" data-k="ipv6_prefix"> 同时更新 IPv6 前缀（ipv6prefix=auto）</label>
 
         <h2>证书输出</h2>
         <div class="grid">
-          <label>证书输出目录<div class="path-row"><input data-k="output_dir"><button type="button" class="btn ghost" onclick="openDirPicker(this.previousElementSibling)">选择</button></div><small class="field-hint">主输出 0600；分发目标中 PFX/P12 与证书为 0644，PEM 私钥固定 0600。</small></label>
+          <label>证书输出目录<div class="path-row"><input data-k="output_dir"><button type="button" class="btn ghost" onclick="openDirPicker(this.previousElementSibling)">选择</button></div><small class="field-hint">默认在应用私有数据目录，避免私钥出现在 SMB/WebDAV 共享目录；分发目标中 PFX/P12 与证书为 0644，PEM 私钥固定 0600。</small></label>
         </div>
-        <p class="hint">备份目录固定在应用数据目录，ACME 数据目录固定为 <code>${APPDATA}/acme</code>；主输出 0600、PFX/P12 与证书 0644、PEM 私钥 0600。上面三项时间参数默认 5 分钟 / 12 小时 / 30 天，一般无需修改。</p>
+        <p class="hint">备份目录固定在应用数据目录，ACME 数据目录固定为 <code>${APPDATA}/acme</code>；主输出目录中的私钥与 PFX/P12 固定 0600，分发到目标目录的文件为 0644（Emby / Plex 才读得到）。上面三项时间参数默认 5 分钟 / 12 小时 / 30 天，一般无需修改。</p>
 
         <h2>Emby / Plex 证书密码</h2>
         <div class="grid">
@@ -154,52 +153,62 @@
     </section>
 
     <section id="tab-logs" class="panel">
-      <div class="savebar"><span>最近 500 条运行日志，敏感值已脱敏</span><button class="btn ghost" onclick="loadLogs()">刷新</button><label class="check inline"><input type="checkbox" id="autolog" checked> 自动刷新</label></div>
+      <div class="savebar"><span>运行日志 · 内存环形缓冲 500 条 · 凭据自动脱敏 · 文件日志 10 MB 轮转</span><button class="btn ghost" onclick="loadLogs()">刷新</button><label class="check inline"><input type="checkbox" id="autolog" checked> 自动刷新</label></div>
       <pre id="logs" class="logs">加载中…</pre>
     </section>
 
     <section id="tab-help" class="panel help">
-      <h2>第一次使用</h2>
-      <p>本应用同时做两件事：检测公网 IP 变化并更新 dynv6 的 DDNS 记录，以及在 Let's Encrypt 证书到期前自动续签、转换并分发。</p>
+      <h2>概述</h2>
+      <p>本应用承担两项职责：以动态 DNS（DDNS）维护 dynv6 zone 的 A/AAAA 记录；以 ACME DNS-01 挑战向 Let's Encrypt 签发证书，并在到期前自动续期、转换格式并分发。</p>
+
+      <h2>接入步骤</h2>
       <ol>
-        <li>登录 <a href="https://dynv6.com" target="_blank">dynv6.com</a>，点击右上角账号 → <b>Keys</b> → <b>HTTP Tokens</b>，复制那串 Token。DDNS 更新和证书签发共用这一个 HTTP Token，不需要两个。</li>
-        <li>在「设置」填写域名与 HTTP Token（邮箱可选），确认输出目录后保存。</li>
-        <li>建议先把证书机构切到 <b>测试环境（staging）</b> 点一次「立即签发」验证流程，成功后再切回正式环境，避免触发速率限制。测试证书默认只导出，不会分发到 Emby/Plex。</li>
-        <li>签发成功后到「证书文件」查看 6 个文件，再到「设置 → 分发目标」配置 Emby / Plex 的目录。</li>
+        <li>在 dynv6 控制台 <b>Keys → HTTP Tokens</b> 获取账户级 HTTP Token。DDNS 更新（Update API）与 DNS-01 记录管理（REST v2）共用同一凭据。</li>
+        <li>「设置」中填写注册域名（zone）与 HTTP Token，保存。</li>
+        <li>建议先以 <b>staging</b> 环境完成首次签发验证链路，再切回生产（production）环境，规避 CA 速率限制（rate limit）。staging 证书默认不分发。</li>
+        <li>签发成功后，在「设置 → 分发目标」为 Emby / Plex 配置目标目录。</li>
       </ol>
-      <h2>路径与授权（飞牛 / Windows / Docker）</h2>
-      <p>飞牛应用默认只能访问自己的数据目录、临时目录和声明的共享目录，<b>不能直接写用户的其他文件夹</b>。如果分发目标不在默认共享目录里，请先到飞牛「应用设置 → 授权路径」把目标目录授权给本应用；应用概览页会列出已授权的路径，并在路径不可写时提示。</p>
+
+      <h2>部署形态与监听</h2>
       <ul>
-        <li><b>飞牛</b>：保持 <code>${APPDATA}</code> / <code>${SHARE}</code> 等变量写法即可，平台会自动替换。</li>
-        <li><b>Windows</b>：双击运行即是正式模式，DDNS 更新、证书签发、分发与定时任务都会真实执行；配置保存在 <code>%LOCALAPPDATA%\dynv6</code>。本地界面使用一次性令牌保护，请从托盘「打开界面」进入，不要直接访问裸地址。证书签发与格式转换均已内置，无需安装 Git / OpenSSL。</li>
-        <li><b>Docker</b>：设置 <code>DYNV6_OUTPUT_DIR</code> 等环境变量并挂载卷，或直接填容器内路径。</li>
+        <li><b>飞牛 fnOS</b>：固定 8092 端口，由统一网关反向代理（reverse proxy），无需端口映射。网关注入的身份仅用于界面显示，权限以本地管理员会话为准。</li>
+        <li><b>Windows / 通用 Linux</b>：默认绑定 <code>127.0.0.1:8092</code>，由一次性访问令牌（local token）+ Host 校验保护，请从托盘进入界面。</li>
+        <li><b>Docker</b>：容器监听 <code>0.0.0.0:8092</code>，compose 仅映射到宿主机回环；以固定 UID 10001 非 root 运行，宿主机挂载目录需 <code>chown 10001:10001</code>。公网部署必须置于 HTTPS 反向代理之后。</li>
       </ul>
-      <h2>关于证书机构</h2>
-      <p>这里只提供 <b>Let's Encrypt 正式</b> 与 <b>staging 测试</b> 两种，均由内置的纯 Go ACME 客户端通过 dynv6 DNS-01 签发，使用现有 HTTP Token 即可，不需要额外凭据。测试证书默认只导出到主输出目录，<b>不会分发到 Emby/Plex</b>；只有显式勾选「允许把测试证书分发到 Emby / Plex」才会覆盖目标文件。其它 CA 需要 EAB 外部账户绑定凭据或额外配置，因此不提供这些选项。</p>
-      <h2>飞牛系统自身的 SSL 证书</h2>
-      <p>本应用<b>不会</b>自动写入系统证书目录（该目录与数据库结构属于飞牛内部实现，升级易失效）。如需让飞牛后台也用这张证书：进入「系统设置 → 安全性 → SSL 证书 → 新增证书」，证书文件选 <code>fullchain.crt</code>，私钥选 <code>.key</code>，手动上传一次即可。之后每 90 天的续期、格式转换、分发由本应用自动完成。</p>
-      <h2>Emby</h2>
-      <p>Emby 后台 → 设置 → 网络（或高级）→ 自定义 SSL 证书：证书路径填分发后的 <code>.pfx</code> 绝对路径，证书密码填「设置」里的 PFX 密码；安全连接模式选「首选，但非必需」；保存后重启 Emby。生成的 PFX 包含站点证书与中间链，已用 .NET 的 <code>X509Certificate2</code> 实测可加载。</p>
-      <h2>Plex</h2>
-      <p>Plex 后台 → 设置 → 网络 → 显示高级 → <i>Custom certificate location</i> 填 <code>.p12</code> 绝对路径，<i>Custom certificate encryption key</i> 填 P12 密码，<b><i>Custom certificate domain</i> 填你的域名</b>（必须与证书里的域名一致）；保存并重启 Plex。生成的 p12 已强制使用 <code>AES-256-CBC / SHA256</code>，符合 Plex 1.32+ 的要求。</p>
-      <h2>安全说明</h2>
+
+      <h2>证书链路</h2>
+      <p>内置 lego（纯 Go ACME 客户端），通过 dynv6 REST API 写入 <code>_acme-challenge</code> TXT 记录完成 DNS-01 验证，无需 sh / curl / openssl。证书机构仅提供 Let's Encrypt 生产与 staging；其他 CA 需要 EAB（External Account Binding）凭据，暂不支持。staging 证书默认仅导出，需显式启用「允许测试证书分发」才会覆盖目标文件。</p>
+
+      <h2>密钥与凭据管理</h2>
       <ul>
-        <li>应用以专用包用户运行，不申请 root，不修改系统定时任务，不改动飞牛系统目录。</li>
-        <li>Token、邮箱、密码保存在 0600 权限的配置文件中，接口不回显，日志自动脱敏。</li>
-        <li>飞牛版本固定使用 8092 端口，由飞牛网关反向代理，不需要开放端口或做端口映射；Docker 用 <code>DYNV6_DOCKER=1</code> 或 <code>DYNV6_LISTEN</code> 监听所有网卡。</li>
-        <li>Windows / 通用 Linux 独立运行时默认监听 <code>127.0.0.1:8092</code>，使用一次性令牌 + Host/Origin 校验；Windows 请从托盘打开，不要直接访问裸端口。</li>
-        <li>Docker 部署默认监听 <code>0.0.0.0:8092</code>（<code>DYNV6_DOCKER=1</code> 或 <code>DYNV6_LISTEN</code>），通过映射端口访问，所有 API 都需要先登录管理员账号；公网访问建议在容器前加 HTTPS 反向代理。</li>
-        <li>自定义路径请指向已授权目录；分发前会做路径规范化与越界检查。</li>
-        <li>主输出默认 0600；分发的 PEM 私钥固定 0600，PFX/P12 与证书 0644。</li>
+        <li>凭据（HTTP Token、TG Bot Token、密码）以 <code>0600</code> 落盘，接口仅返回 <code>__KEEP__</code> 占位符，日志统一脱敏。</li>
+        <li>主输出目录默认位于应用私有数据目录；私钥与 PFX/P12 强制 <code>0600</code>，分发目标文件为 <code>0644</code>（供其他服务读取）。</li>
+        <li>分发前执行路径规范化（canonicalize）与越界（traversal）校验；自定义目录需在飞牛「应用设置 → 授权路径」中授权。</li>
       </ul>
+
+      <h2>消费端配置</h2>
+      <p><b>Emby</b>：设置 → 网络 → 自定义 SSL 证书，指向分发后的 <code>.pfx</code> 绝对路径，密码与「PFX 密码」一致，安全连接模式建议「首选，但非必需」，保存后重启服务。</p>
+      <p><b>Plex</b>：设置 → 网络（显示高级）→ <i>Custom certificate location</i> 填 <code>.p12</code> 绝对路径，<i>Custom certificate encryption key</i> 填 P12 密码，<i>Custom certificate domain</i> 必须与证书 CN/SAN 一致；保存后重启。PFX/P12 均以 AES-256-CBC + SHA256 导出，符合 Plex 1.32+ 的解析要求。</p>
+      <p><b>飞牛系统证书</b>：本应用不写系统证书目录。如需复用，请在「系统设置 → 安全性 → SSL 证书」手动导入 <code>fullchain.crt</code> 与 <code>.key</code>，后续续期由本应用自动完成。</p>
+
+      <h2>通知</h2>
+      <p>通过 Telegram Bot API 推送 DDNS 更新、签发/续期、分发与转换结果；支持 HTTP/SOCKS5 代理与 HTML 转义正文。相同内容的重复通知在 10 分钟窗口内去重。</p>
+
+      <h2>运维与故障定位</h2>
+      <ul>
+        <li>调度：DDNS 默认 5 分钟，证书检查默认 12 小时（阈值 30 天）；任务按 lane 串行执行，DDNS 与证书互不阻塞。</li>
+        <li>日志：界面展示环形缓冲最近 500 条（凭据已脱敏）；文件日志 <code>dynv6.log</code> 10 MB 轮转保留一份。</li>
+        <li>签发实时输出阶段化日志（注册账户 → 创建 TXT → 等待生效 → 验证 → 导出 → 转换 → 分发）；支持取消运行中的任务，取消会中断 DNS 生效等待并删除已创建的 TXT 记录。</li>
+        <li>进程异常退出后，下次启动自动清理超过 1 小时的残留 TXT 记录。</li>
+        <li>证书机构切换（staging ↔ production）会自动强制重新签发，避免部署不受信任的 staging 证书。</li>
+      </ul>
+
       <h2>管理员账号</h2>
-      <p>首次在 Windows / Docker / 通用 Linux 上打开界面时，会先进入初始化页面创建管理员用户名和密码。密码使用 PBKDF2-SHA256 加盐保存，不保存明文；登录后 7 天内有效。</p>
+      <p>所有部署形态首次进入需创建管理员账号；口令以 PBKDF2-SHA256（120,000 迭代）加盐存储，会话有效期 7 天。</p>
       <ul>
-        <li>飞牛环境由统一网关注入身份，不需要本地管理员账号；应用本身固定监听 8092 端口，由网关反向代理。本地账号主要用于 Windows / Docker / 通用 Linux（默认 8092 端口）。</li>
-        <li>忘记密码：停止应用，删除数据目录下的 <code>admin.json</code>，重启后重新初始化。删除前请确认没有其他地方使用同一份数据目录。</li>
-        <li>如果 <code>admin.json</code> 损坏或不可读，应用会锁定初始化并提示删除该文件，避免被他人重新接管。</li>
-        <li>设置页「管理员账号」可以修改密码；修改后旧会话会全部失效，需要重新登录。</li>
-        <li>如需临时关闭本地管理员鉴权，可设置 <code>DYNV6_AUTH_DISABLED=1</code>，仅建议在完全受信任的本机调试时使用。</li>
+        <li>初始化令牌仅对「绕过网关的直连」来源强制：飞牛桌面图标经统一网关访问（回环来源）免令牌，直接创建账号；浏览器直接访问 NAS 的 IP:8092、Tailscale 等组网地址直连、以及 Docker 端口映射直连，均视为不可信来源、需要令牌（Docker 用 <code>docker logs dynv6 | grep 初始化令牌</code> 获取）。令牌在初始化成功后自动销毁。</li>
+        <li>忘记口令：停止应用、删除数据目录 <code>admin.json</code> 后重启重新初始化；文件损坏时应用 fail-closed，锁定初始化以防接管。</li>
+        <li>修改口令后全部会话立即失效。</li>
       </ul>
     </section>
   </main>
@@ -214,6 +223,7 @@
       <label>用户名<input id="setup-username" value="admin" autocomplete="username" maxlength="32"></label>
       <label>密码<input id="setup-password" type="password" autocomplete="new-password" placeholder="至少 8 位"></label>
       <label>确认密码<input id="setup-confirm" type="password" autocomplete="new-password" placeholder="再次输入密码"></label>
+      <label id="setup-token-row" class="hidden">初始化令牌<input id="setup-token" autocomplete="off" placeholder="见启动日志 / setup-token 文件"><small class="field-hint">仅绕过网关直连时需要（浏览器访问 NAS IP、Tailscale 组网地址、Docker 端口映射）；经飞牛桌面图标进入免令牌。令牌见启动日志 / setup-token 文件，初始化后自动删除。</small></label>
       <button class="btn primary" type="submit">创建管理员并进入</button>
       <p class="hint">首次启动需要创建管理员账号；完成后请妥善保存密码。</p>
     </form>

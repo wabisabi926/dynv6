@@ -54,8 +54,8 @@ type App struct {
 	admin        AdminAuth
 	sessions     map[string]adminSession
 	loginGuard   map[string]loginAttempt
-	authDisabled bool
-	authBroken   bool // admin.json 存在但损坏/不可读：禁止重新初始化（fail-closed）
+	setupToken   string // 服务模式首次启动的一次性初始化令牌
+	authBroken   bool   // admin.json 存在但损坏/不可读：禁止重新初始化（fail-closed）
 	logMu        sync.Mutex
 	logs         []string
 	logFile      *os.File
@@ -67,6 +67,7 @@ type App struct {
 	laneBusy     map[string]bool
 	cmdMu        sync.Mutex
 	cancelReq    bool
+	cancelCh     chan struct{} // 取消任务时 close，唤醒 DNS 生效等待
 	notifyMu     sync.Mutex
 	lastNotify   map[string]time.Time
 	pathMu       sync.Mutex
@@ -84,8 +85,8 @@ func newApp(p Paths, demo bool) *App {
 		lastNotify: map[string]time.Time{},
 		sessions:   map[string]adminSession{},
 		loginGuard: map[string]loginAttempt{},
+		cancelCh:   make(chan struct{}),
 	}
-	a.authDisabled = os.Getenv("DYNV6_AUTH_DISABLED") == "1"
 	if p.Var != "" {
 		_ = os.MkdirAll(p.Var, 0700)
 		logPath := filepath.Join(p.Var, "dynv6.log")
@@ -101,9 +102,7 @@ func newApp(p Paths, demo bool) *App {
 		}
 	}
 	a.loadAdminAuth()
-	if a.authDisabled {
-		a.log("警告：DYNV6_AUTH_DISABLED=1，本地管理员账号鉴权已禁用")
-	}
+	a.initSetupToken()
 	return a
 }
 
@@ -254,12 +253,24 @@ func (a *App) wasCanceled() bool {
 	return a.cancelReq
 }
 
-// cancelCurrent 标记取消；证书签发为内置 HTTP 流程，会在阶段间尽快退出
+// cancelCurrent 标记取消并广播给正在等待 DNS 生效的签发流程
 func (a *App) cancelCurrent() bool {
 	a.cmdMu.Lock()
-	defer a.cmdMu.Unlock()
 	a.cancelReq = true
+	ch := a.cancelCh
+	a.cancelCh = make(chan struct{})
+	a.cmdMu.Unlock()
+	if ch != nil {
+		close(ch)
+	}
 	return true
+}
+
+// cancelChan 返回当前任务的取消信号；测试里未初始化时返回 nil（select 会永久阻塞该分支）
+func (a *App) cancelChan() <-chan struct{} {
+	a.cmdMu.Lock()
+	defer a.cmdMu.Unlock()
+	return a.cancelCh
 }
 
 // capabilities 列出当前版本支持的功能（证书签发与转换均为内置实现）

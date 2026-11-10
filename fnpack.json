@@ -23,24 +23,8 @@
       "is_docker": false,
       "service_port": "",
       "releases": {
-        "1.0.0": {
-          "changelog": "首个公开发布版本，包含 DDNS 自动更新、证书签发续期与证书分发完整链路。",
-          "updated_at": "2026-11-09T13:57:25+00:00",
-          "packages": {
-            "x86": {
-              "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.0/dynv6_1.0.0_x86.fpk",
-              "sha256": "c46464e76e0c31f17053c0d20b244567ce526d831951bc145573f9bc57d3ce40",
-              "size": 3822882
-            },
-            "arm": {
-              "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.0/dynv6_1.0.0_arm.fpk",
-              "sha256": "4a092ff32f7cc7a96dde27d355a7124516c0fed3381c46b2a301af6ec5252ae5",
-              "size": 3502515
-            }
-          }
-        },
         "1.0.1": {
-          "changelog": "应用图标重绘、Web UI 响应式适配，修复飞牛 App 内请求来源校验。",
+          "changelog": "应用图标重绘：深蓝底、青色盾牌与镂空 d6 标识，导出 16–256 px 全尺寸，飞牛、Windows 与 Web UI 共用。",
           "packages": {
             "x86": {
               "sha256": "61f2a94bf0113d8b79d08f9eb84f40c05df1d3f022b8aab0b84b4b4ea6d64f52",
@@ -54,6 +38,22 @@
             }
           },
           "updated_at": "2026-11-10T00:02:33+08:00"
+        },
+        "1.0.2": {
+          "changelog": "**H-01 修复**：移除对网关注入头 `X-Trim-Username` / `X-Trim-Isadmin` 的权限信任。服务模式（Docker / 飞牛网关 / 反向代理）统一要求本地管理员会话（PBKDF2-SHA256），网关身份仅作界面展示，伪造请求头不再能获取管理员权限。",
+          "packages": {
+            "x86": {
+              "sha256": "e0f8ae667319c33ffd1ecb05f5b070184bb4f245b5e24c319c9549825a8560d1",
+              "size": 3670944,
+              "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.2/dynv6_1.0.2_x86.fpk"
+            },
+            "arm": {
+              "sha256": "fc7d2a729ef7b6a2e106f4afddc7c1d9f055802c3a37211837669a4b79e4d839",
+              "size": 3315196,
+              "download_url": "https://github.com/wabisabi926/dynv6/releases/download/v1.0.2/dynv6_1.0.2_arm.fpk"
+            }
+          },
+          "updated_at": "2026-11-10T11:04:49+08:00"
         }
       }
     }

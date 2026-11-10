@@ -173,6 +173,8 @@ func (a *App) newAcmeClient(c Config, home string) (*lego.Client, error) {
 		}
 	}
 	provider := newDynv6DNS(c.Token, time.Duration(c.DNSSleep)*time.Second)
+	provider.cancel = a.cancelChan()
+	provider.store = newTXTStore(a.paths.Var)
 	if err := client.Challenge.SetDNS01Provider(provider); err != nil {
 		return nil, fmt.Errorf("设置 DNS-01 验证失败: %w", err)
 	}
@@ -238,10 +240,15 @@ func (a *App) installPEM(c Config, res *certificate.Resource) error {
 			}
 			return fmt.Errorf("证书导出不完整，缺少 %s", k)
 		}
-		if err := atomicWrite(f[k], data, mode); err != nil {
+		// 私钥含敏感材料，无论 FileMode 如何配置都固定 0600
+		writeMode := mode
+		if k == "key" {
+			writeMode = 0600
+		}
+		if err := atomicWrite(f[k], data, writeMode); err != nil {
 			return err
 		}
-		_ = os.Chmod(f[k], mode)
+		_ = os.Chmod(f[k], writeMode)
 	}
 	if err := a.verifyPEM(c); err != nil {
 		return fmt.Errorf("证书自检失败: %w", err)

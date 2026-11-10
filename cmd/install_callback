@@ -1,8 +1,18 @@
 #!/bin/bash
-# 安装后初始化：建立目录并收紧权限（配置内含 Token 与密码）
+# 安装后初始化：建立目录并收紧权限（配置内含 Token 与密码），随后自动启动服务。
+# 飞牛应用中心安装完成后不会自动执行 cmd/main start（manifest 无自启动字段），
+# 必须在 install_callback 里显式启动，否则新装应用处于「停止」状态需要手动点启动。
 set -u
 VAR="${TRIM_PKGVAR:-}"
 ETC="${TRIM_PKGETC:-}"
 [ -n "$VAR" ] && mkdir -p "$VAR" && chmod 700 "$VAR"
 [ -n "$ETC" ] && mkdir -p "$ETC" && chmod 700 "$ETC"
+
+MAIN="$(dirname "$0")/main"
+if [ -x "$MAIN" ]; then
+    if ! "$MAIN" start; then
+        # 启动失败不阻断安装：错误写入系统日志供界面弹窗，用户仍可手动点「启动」重试
+        echo "dynv6 安装后自动启动失败，请查看应用日志或在应用中心手动启动" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    fi
+fi
 exit 0
