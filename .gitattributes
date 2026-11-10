@@ -1,0 +1,17 @@
+# 统一行为：文本文件自动处理
+* text=auto
+
+# shell 脚本必须保持 LF，CRLF 会导致 Linux/bash 执行失败（如 fpk 的 cmd/main）
+cmd/** text eol=lf
+*.sh text eol=lf
+scripts/** text eol=lf
+
+# Windows 专用
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制产物不转换
+*.fpk binary
+*.exe binary
+*.png binary
+*.ico binary
