@@ -1,5 +1,5 @@
 appname=dynv6
-version=1.0.1
+version=1.0.2
 display_name=Dynv6 管家
 desc=dynv6 动态域名（DDNS）更新 + Let's Encrypt 证书自动签发续期：导出 PEM、Emby PFX、Plex P12，路径与文件名全部可自定义。
 source=thirdparty
@@ -18,4 +18,4 @@ service_data_dir=/app_data/dynv6/data
 service_log_dir=/app_data/dynv6/logs
 service_run_dir=/app_data/dynv6/run
 share_dirs=/vol1,/vol2,/vol3,/vol4,/volume1,/volume2,/volume3,/volume4,/mnt/user,/mnt/ssd,/mnt/cache,/share,/public,/home
-changelog=1.0.1 应用图标重绘：深蓝底、青色盾牌与镂空 d6 标识，导出 16–256 px 全尺寸，飞牛、Windows 与 Web UI 共用。
+changelog=1.0.2 **H-01 修复**：移除对网关注入头 `X-Trim-Username` / `X-Trim-Isadmin` 的权限信任。服务模式（Docker / 飞牛网关 / 反向代理）统一要求本地管理员会话（PBKDF2-SHA256），网关身份仅作界面展示，伪造请求头不再能获取管理员权限。

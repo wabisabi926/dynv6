@@ -267,9 +267,12 @@ function showAuthGate(mode, errorText) {
   const isSetup = mode === 'setup';
   setupForm.classList.toggle('hidden', !isSetup);
   loginForm.classList.toggle('hidden', isSetup);
+  const tokenRequired = !!(authInfo && authInfo.setupTokenRequired);
+  const tokenRow = document.getElementById('setup-token-row');
+  if (tokenRow) tokenRow.classList.toggle('hidden', !isSetup || !tokenRequired);
   title.textContent = isSetup ? '创建管理员账号' : '登录 Dynv6 管家';
   desc.textContent = isSetup
-    ? '首次启动需要创建管理员，完成后即可进入。'
+    ? (tokenRequired ? '首次启动需要创建管理员；初始化令牌见应用启动日志（Docker 用 docker logs 查看）。' : '首次启动需要创建管理员，完成后即可进入。')
     : '请输入管理员用户名和密码。';
   error.textContent = errorText || '';
   if (isSetup) {
@@ -286,8 +289,6 @@ function showAuthGate(mode, errorText) {
 }
 
 function updateAuthUI() {
-  const gateway = !!(authInfo && authInfo.gateway);
-  const disabled = !!(authInfo && authInfo.authDisabled);
   const username = (authInfo && authInfo.username) || '';
   const adminUser = document.getElementById('admin-user');
   if (adminUser) {
@@ -295,9 +296,9 @@ function updateAuthUI() {
     adminUser.classList.toggle('hidden', !username);
   }
   const logout = document.getElementById('logout-btn');
-  if (logout) logout.classList.toggle('hidden', gateway || disabled);
+  if (logout) logout.classList.remove('hidden');
   const box = document.getElementById('admin-account-box');
-  if (box) box.classList.toggle('hidden', gateway || disabled);
+  if (box) box.classList.remove('hidden');
   const adminName = document.getElementById('admin-username');
   if (adminName) adminName.textContent = username || '—';
 }
@@ -350,15 +351,18 @@ async function submitSetup(event) {
   const confirm = document.getElementById('setup-confirm').value || '';
   if (password.length < 8) { error.textContent = '密码至少 8 位'; return; }
   if (password !== confirm) { error.textContent = '两次输入的密码不一致'; return; }
+  const setupToken = (document.getElementById('setup-token').value || '').trim();
   const r = await api('api/setup/admin', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify({ username, password, setupToken })
   });
   if (r.ok) {
-    authInfo = { authenticated: true, username: r.username || username, gateway: false, authDisabled: false };
+    authInfo = { authenticated: true, username: r.username || username };
     document.getElementById('setup-password').value = '';
     document.getElementById('setup-confirm').value = '';
+    const tokenInput = document.getElementById('setup-token');
+    if (tokenInput) tokenInput.value = '';
     startApp();
     return;
   }
@@ -381,7 +385,7 @@ async function submitLogin(event) {
     body: JSON.stringify({ username, password })
   });
   if (r.ok) {
-    authInfo = { authenticated: true, username: r.username || username, gateway: false, authDisabled: false };
+    authInfo = { authenticated: true, username: r.username || username };
     document.getElementById('login-password').value = '';
     startApp();
     return;

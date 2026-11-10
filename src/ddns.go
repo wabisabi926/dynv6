@@ -17,7 +17,14 @@ func detectIP(rawURL string, wantV4 bool, timeout time.Duration) (string, error)
 	if rawURL == "" {
 		return "", fmt.Errorf("未配置探测地址")
 	}
-	client := &http.Client{Timeout: timeout}
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", fmt.Errorf("探测地址不合法: %s", rawURL)
+	}
+	// 探测源固定为内置常量；不跟随重定向，避免被导向不可信地址
+	client := &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
 	req, err := http.NewRequest("GET", rawURL, nil)
 	if err != nil {
 		return "", err

@@ -52,9 +52,8 @@ type loginAttempt struct {
 type authStatusInfo struct {
 	Authenticated bool
 	SetupRequired bool
-	Gateway       bool
+	Gateway       bool // 仅表示使用了网关反代，不再代表已认证
 	Admin         bool
-	AuthDisabled  bool
 	AdminBroken   bool
 	Username      string
 }
@@ -360,24 +359,17 @@ func (a *App) clearAdminCookie(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// gatewayUser 只用于界面展示，不参与任何权限判断。
 func (a *App) gatewayUser(r *http.Request) string {
 	return strings.TrimSpace(r.Header.Get("X-Trim-Username"))
 }
 
-func (a *App) gatewayAdmin(r *http.Request) bool {
-	if a.gatewayUser(r) == "" {
-		return false
-	}
-	raw := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Trim-Isadmin")))
-	return raw == "true" || raw == "1"
-}
-
+// authStatus 只依据本地管理员会话判断认证状态；网关头仅用于展示用户名，
+// 不再作为身份凭据，避免伪造 X-Trim-* 绕过登录（H-01）。
 func (a *App) authStatus(r *http.Request) authStatusInfo {
-	if a.authDisabled {
-		return authStatusInfo{Authenticated: true, Admin: a.isAdminQuiet(r), AuthDisabled: true, Username: "admin"}
-	}
-	if user := a.gatewayUser(r); user != "" {
-		return authStatusInfo{Authenticated: true, Gateway: true, Admin: a.gatewayAdmin(r), Username: user}
+	// Unix Socket 模式由 SO_PEERCRED 限定连接进程，无需浏览器登录
+	if a.paths.Listen == "" && a.paths.DevPort == "" && a.paths.Socket != "" {
+		return authStatusInfo{Authenticated: true, Admin: true, Username: "local"}
 	}
 	if username, ok := a.adminSession(r); ok {
 		return authStatusInfo{Authenticated: true, Admin: true, Username: username}
@@ -385,7 +377,7 @@ func (a *App) authStatus(r *http.Request) authStatusInfo {
 	if a.authBroken {
 		return authStatusInfo{AdminBroken: true}
 	}
-	return authStatusInfo{SetupRequired: !a.hasAdmin()}
+	return authStatusInfo{SetupRequired: !a.hasAdmin(), Username: a.gatewayUser(r)}
 }
 
 func remoteIP(r *http.Request) string {
@@ -486,15 +478,23 @@ func (a *App) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	status := a.authStatus(r)
 	writeJSON(w, map[string]any{
-		"ok":            true,
-		"authenticated": status.Authenticated,
-		"setupRequired": status.SetupRequired,
-		"gateway":       status.Gateway,
-		"admin":         status.Admin,
-		"username":      status.Username,
-		"authDisabled":  status.AuthDisabled,
-		"adminBroken":   status.AdminBroken,
+		"ok":                 true,
+		"authenticated":      status.Authenticated,
+		"setupRequired":      status.SetupRequired,
+		"gateway":            status.Gateway,
+		"admin":              status.Admin,
+		"username":           status.Username,
+		"setupTokenRequired": a.setupToken != "" && !isLoopbackRemote(r),
+		"adminBroken":        status.AdminBroken,
 	})
+}
+
+// isLoopbackRemote 判断请求是否来自本机回环（飞牛网关反代、本机浏览器）。
+// 回环来源的初始化免 setup token：能连上回环说明已在本机/已过网关登录；
+// 局域网直连 8092 的抢注来源不是回环，仍必须携带令牌。
+func isLoopbackRemote(r *http.Request) bool {
+	ip := net.ParseIP(remoteIP(r))
+	return ip != nil && ip.IsLoopback()
 }
 
 func (a *App) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
@@ -515,14 +515,6 @@ func (a *App) handleSetupAdmin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "请求来源校验失败，请刷新页面后重试")
 		return
 	}
-	if a.authDisabled {
-		writeAuthError(w, http.StatusConflict, "AUTH_DISABLED", "管理员账号鉴权已被环境变量禁用")
-		return
-	}
-	if user := a.gatewayUser(r); user != "" && !a.gatewayAdmin(r) {
-		writeErr(w, http.StatusForbidden, "需要飞牛管理员权限")
-		return
-	}
 	if a.authBroken {
 		writeAuthError(w, http.StatusInternalServerError, "ADMIN_BROKEN", "管理员配置损坏，请删除数据目录下的 admin.json 后重启应用")
 		return
@@ -532,13 +524,33 @@ func (a *App) handleSetupAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username   string `json:"username"`
+		Password   string `json:"password"`
+		SetupToken string `json:"setupToken"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
+	// 服务模式首次初始化：非回环来源必须携带一次性令牌，防止局域网抢注；
+	// 回环来源（飞牛网关反代、本机浏览器）的请求已由网关/本机登录保护，免令牌。
+	// 失败同样计入限流，防止暴力猜测。
+	keys := loginKeys(r, "setup")
+	if ok, retry := a.allowLogin(keys); !ok {
+		secs := int(retry.Seconds())
+		if secs < 1 {
+			secs = 1
+		}
+		w.Header().Set("Retry-After", strconv.Itoa(secs))
+		writeErr(w, http.StatusTooManyRequests, "尝试过于频繁，请稍后再试")
+		return
+	}
+	if a.setupToken != "" && !isLoopbackRemote(r) && !secureEqual(strings.TrimSpace(req.SetupToken), a.setupToken) {
+		a.failLogin(keys)
+		writeAuthError(w, http.StatusForbidden, "SETUP_TOKEN_INVALID", "初始化令牌不正确：请查看应用启动日志或数据目录下的 setup-token 文件")
+		return
+	}
+	a.resetLogin(keys)
 	username := normalizeAdminUsername(req.Username)
 	if !validAdminUsername(username) {
 		writeErr(w, http.StatusBadRequest, "用户名需为 3-32 位，只能包含字母、数字、下划线和短横线，且不能是纯数字")
@@ -564,6 +576,7 @@ func (a *App) handleSetupAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.setAdminCookie(w, r, token)
+	a.clearSetupToken()
 	a.resetLogin(loginKeys(r, username))
 	a.log("管理员账号已初始化: %s", username)
 	writeJSON(w, map[string]any{"ok": true, "message": "初始化成功", "token": token, "username": username})
@@ -576,10 +589,6 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if !a.checkCSRF(r) {
 		writeErr(w, http.StatusForbidden, "请求来源校验失败，请刷新页面后重试")
-		return
-	}
-	if a.authDisabled {
-		writeAuthError(w, http.StatusConflict, "AUTH_DISABLED", "管理员账号鉴权已被环境变量禁用")
 		return
 	}
 	if !a.hasAdmin() {
@@ -646,10 +655,6 @@ func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	if !a.checkCSRF(r) {
 		writeErr(w, http.StatusForbidden, "请求来源校验失败，请刷新页面后重试")
-		return
-	}
-	if a.authDisabled {
-		writeAuthError(w, http.StatusConflict, "AUTH_DISABLED", "管理员账号鉴权已被环境变量禁用")
 		return
 	}
 	if !a.sessionValid(r) {

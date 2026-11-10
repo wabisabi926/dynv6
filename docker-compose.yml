@@ -4,12 +4,19 @@ services:
       context: .
       args:
         VERSION: dev
-    image: ghcr.io/wabisabi926/dynv6:latest
+    image: ghcr.io/wabisabi926/dynv6:1.0.2
     container_name: dynv6
     restart: unless-stopped
+    # 与应用镜像内的固定 UID 一致；宿主机 ./data 需 chown -R 10001:10001
+    user: "10001:10001"
     ports:
-      # 宿主机端口:容器端口；如只在本机反向代理后使用，可改为 "127.0.0.1:8092:8092"
-      - "8092:8092"
+      # 只在本机监听；需要局域网访问时请置于 HTTPS 反向代理之后
+      - "127.0.0.1:8092:8092"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       TZ: Asia/Shanghai
       # 默认 DYNV6_DOCKER=1 监听 0.0.0.0:8092；需要改端口时取消注释

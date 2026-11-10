@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,6 +19,7 @@ func newLocalTestApp() *App {
 }
 
 // 服务模式（Docker / 反向代理）没有本地令牌，除登录相关接口外必须要求管理员会话。
+// /api/status 允许匿名访问，但只能拿到降级信息，不能含路径/任务/状态。
 func TestServerModeRequiresLogin(t *testing.T) {
 	a := &App{
 		paths:      Paths{Listen: "0.0.0.0:8092", Var: t.TempDir()},
@@ -28,8 +30,20 @@ func TestServerModeRequiresLogin(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://example.com/api/status", nil))
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("未登录访问 /api/status 应 401，得到 %d", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("未登录访问 /api/status 应返回降级 200，得到 %d", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["admin"] != false {
+		t.Fatalf("降级响应 admin 应为 false: %v", body["admin"])
+	}
+	for _, k := range []string{"paths", "state", "tasks", "authorized_paths"} {
+		if _, leaked := body[k]; leaked {
+			t.Fatalf("降级响应不应包含 %s", k)
+		}
 	}
 
 	for _, path := range []string{"/api/health", "/api/auth/status"} {
@@ -44,6 +58,72 @@ func TestServerModeRequiresLogin(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://example.com/", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("首页应允许匿名访问以便登录，得到 %d", rec.Code)
+	}
+}
+
+// H-01 回归：伪造 X-Trim-* 网关头绝不能获得管理员权限。
+func TestForgedGatewayHeadersRejected(t *testing.T) {
+	a := &App{
+		paths:      Paths{Listen: "0.0.0.0:8092", Var: t.TempDir()},
+		laneBusy:   map[string]bool{},
+		lastNotify: map[string]time.Time{},
+	}
+	h := a.handler()
+	forged := func(req *http.Request) {
+		req.Header.Set("X-Trim-Username", "attacker")
+		req.Header.Set("X-Trim-Isadmin", "true")
+		req.Header.Set("X-Requested-With", "dynv6")
+	}
+
+	for _, path := range []string{"/api/config", "/api/files", "/api/files/get?name=x.key", "/api/tasks", "/api/logs", "/api/dirs", "/api/probe", "/api/actions/ddns"} {
+		req := httptest.NewRequest(http.MethodGet, "http://example.com"+path, nil)
+		forged(req)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("伪造头访问 %s 应 401，得到 %d", path, rec.Code)
+		}
+	}
+
+	// 写配置同样必须被拦在鉴权层
+	req := httptest.NewRequest(http.MethodPost, "http://example.com/api/config", nil)
+	forged(req)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("伪造头写配置应 401，得到 %d", rec.Code)
+	}
+
+	// status 即使带伪造头也只能拿降级信息
+	req = httptest.NewRequest(http.MethodGet, "http://example.com/api/status", nil)
+	forged(req)
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("带伪造头的 status 应 200，得到 %d", rec.Code)
+	}
+	var statusBody map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &statusBody); err != nil {
+		t.Fatal(err)
+	}
+	if statusBody["admin"] != false {
+		t.Fatalf("伪造头不应让 status 变成管理员视图: %v", statusBody["admin"])
+	}
+}
+
+// 鉴权关闭开关已移除：即使设置 DYNV6_AUTH_DISABLED，服务模式仍要求登录。
+func TestAuthDisabledEnvIgnored(t *testing.T) {
+	t.Setenv("DYNV6_AUTH_DISABLED", "1")
+	a := &App{
+		paths:      Paths{Listen: "0.0.0.0:8092", Var: t.TempDir()},
+		laneBusy:   map[string]bool{},
+		lastNotify: map[string]time.Time{},
+	}
+	h := a.handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://example.com/api/config", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("DYNV6_AUTH_DISABLED 不应关闭鉴权，得到 %d", rec.Code)
 	}
 }
 

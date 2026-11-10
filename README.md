@@ -11,7 +11,7 @@ dynv6 动态域名（DDNS）自动更新 + Let's Encrypt 证书自动签发、�
 - **分发**：证书可导出 PEM，并自动生成 Emby 使用的 PFX、Plex 使用的 P12，输出路径与文件名均可自定义。
 - **通知**：支持 Telegram 等通知渠道，任务成功/失败均可推送。
 - **调度**：内置定时任务，IP 探测、DDNS、证书检查按设定间隔运行；日志自动轮转。
-- **鉴权**：飞牛由网关注入身份；Windows / Linux / Docker 使用本地管理员账号（PBKDF2-SHA256 加盐存储）。
+- **鉴权**：所有部署形态统一使用本地管理员账号（PBKDF2-SHA256 加盐存储）；飞牛网关注入的身份仅用于界面显示用户名，不作为权限凭据。
 
 ## 端口
 
@@ -22,7 +22,7 @@ dynv6 动态域名（DDNS）自动更新 + Let's Encrypt 证书自动签发、�
 | 飞牛 fnOS | 固定 8092，由飞牛网关反向代理 | 飞牛桌面打开应用，无需端口映射 |
 | Windows | `127.0.0.1:8092` | 托盘图标打开，或访问 `http://127.0.0.1:8092/` |
 | 通用 Linux | `127.0.0.1:8092` | 本机浏览器访问 `http://127.0.0.1:8092/` |
-| Docker | `0.0.0.0:8092` | `http://宿主机IP:8092/` |
+| Docker | 容器内 `0.0.0.0:8092` | compose 默认只映射 `127.0.0.1:8092`，本机访问 `http://127.0.0.1:8092/` |
 
 可用 `DYNV6_DEV_PORT`（本地模式）或 `DYNV6_LISTEN`（服务模式）覆盖默认端口。
 
@@ -51,38 +51,51 @@ chmod +x dynv6_<版本>_linux_amd64
 
 ### Docker
 
+镜像以固定非 root 用户 `10001` 运行，宿主机挂载目录需先授权：
+
 ```bash
+mkdir -p ./data && sudo chown -R 10001:10001 ./data
 docker run -d --name dynv6 --restart unless-stopped \
-  -p 8092:8092 \
+  -p 127.0.0.1:8092:8092 \
   -v ./data:/data \
-  ghcr.io/wabisabi926/dynv6:latest
+  ghcr.io/wabisabi926/dynv6:1.0.2
 ```
 
-或使用仓库内的 `docker-compose.yml`：
+或使用仓库内的 `docker-compose.yml`（固定版本标签 `1.0.2`，默认只绑定本机、非 root、日志限制 10MB×3）：
 
 ```bash
 docker compose up -d
 ```
 
-然后访问 `http://宿主机IP:8092/`，首次进入创建管理员账号。配置、状态、`admin.json` 与证书均在 `/data`，升级前请备份该目录；公网使用建议在容器前加 HTTPS 反向代理。
+然后访问 `http://127.0.0.1:8092/`，首次进入创建管理员账号。服务模式（Docker / 反向代理）会生成一次性初始化令牌，先取回：
+
+```bash
+docker logs dynv6 2>&1 | grep "首次初始化令牌"
+# 或查看数据目录中的 setup-token 文件（0600）
+```
+
+在初始化页面填入该令牌即可，成功后文件自动删除。配置、状态、`admin.json` 与证书均在 `/data`，升级前请备份该目录；需要局域网或公网访问时请在容器前加 HTTPS 反向代理，不要直接把 8092 暴露到公网。
 
 ## 首次使用
 
-1. 打开界面，在「设置」中填写 dynv6 域名与 HTTP Token（DDNS 与证书签发共用同一个 Token）；
-2. 按需调整 IP 探测、证书机构、密钥类型、输出路径与通知方式；
+1. 首次打开界面先创建管理员账号（所有部署形态都需要）；Docker / 反向代理等「服务模式」还需输入启动日志里的一次性初始化令牌，防止他人抢注。Windows / 通用 Linux 绑定回环，无需令牌；
+2. 在「设置」中填写 dynv6 域名与 HTTP Token（DDNS 与证书签发共用同一个 Token），按需调整证书机构、密钥类型、输出路径与通知方式；
 3. 保存后可手动执行一次「立即更新」与「立即签发」验证链路。
 
-Windows / Linux / Docker 首次进入需创建管理员账号；飞牛环境由网关注入身份，一般无需单独登录。
+所有部署形态首次进入都需要创建管理员账号；飞牛网关注入的用户名只用于显示，权限以本地管理员会话为准。
 
 ## 安全说明
 
 - 应用不申请 root，不修改系统定时任务，不改动飞牛系统证书目录。
+- 服务监听 8092 时请置于网关 / HTTPS 反向代理之后，不要直接把端口暴露到公网；所有 API 都需要本地管理员会话，网关注入的身份头不作为凭据。
+- dynv6 Update API 要求把 Token 放在 URL 查询参数中；HTTPS 下链路加密，但请勿使用不可信的 TLS 中间人代理，避免完整 URL 被记录。
 - Token、邮箱、密码保存在权限 `0600` 的配置文件中，接口不回显，日志自动脱敏。
-- 私钥固定 `0600`，PEM 私钥 `0600`，PFX/P12 与证书 `0644`。
+- 证书默认输出到应用私有数据目录（`${APPDATA}/certs`），不落在 SMB/WebDAV 共享目录；主输出的私钥（`.key`）与 PFX/P12 固定 `0600`，公钥证书使用主输出权限（默认 `0600`），分发到目标目录的文件为 `0644` 以便 Emby/Plex 读取。
 - Windows / Linux 本地模式使用一次性令牌 + HttpOnly Cookie + Host/Origin/CSRF 校验。
 - Docker 服务模式下除健康检查、登录与首次初始化外，所有 API 都要求管理员会话。
 - 忘记密码：停止应用，删除数据目录下的 `admin.json`，重启后重新初始化。
 - 如果 `admin.json` 损坏或不可读，应用会锁定初始化并提示人工处理，避免被他人重新接管。
+- 下载后先校验哈希：`sha256sum -c SHA256SUMS.txt`。Release 同时提供 `SHA256SUMS.txt.sigstore.json`（cosign keyless 签名），可用 `cosign verify-blob --bundle SHA256SUMS.txt.sigstore.json --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp 'https://github.com/wabisabi926/dynv6/.*' SHA256SUMS.txt` 验证来源；Docker 镜像请固定版本标签，不要用 `latest`。
 
 ## 常见问题
 

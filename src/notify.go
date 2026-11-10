@@ -22,11 +22,21 @@ func (a *App) telegramReady(c Config) bool {
 	return c.TGEnabled && strings.TrimSpace(c.TGBotToken) != "" && strings.TrimSpace(c.TGChatID) != ""
 }
 
+func allowedProxyScheme(s string) bool {
+	switch strings.ToLower(s) {
+	case "http", "https", "socks5", "socks5h":
+		return true
+	}
+	return false
+}
+
 func (a *App) telegramClient(c Config) *http.Client {
 	tr := &http.Transport{Proxy: http.ProxyFromEnvironment}
-	if strings.TrimSpace(c.TGProxyURL) != "" {
-		if u, err := url.Parse(c.TGProxyURL); err == nil {
+	if raw := strings.TrimSpace(c.TGProxyURL); raw != "" {
+		if u, err := url.Parse(raw); err == nil && u.Host != "" && allowedProxyScheme(u.Scheme) {
 			tr.Proxy = http.ProxyURL(u)
+		} else {
+			a.log("警告：Telegram 代理地址不合法，已忽略: %s", raw)
 		}
 	}
 	return &http.Client{Timeout: 12 * time.Second, Transport: tr}
@@ -90,6 +100,11 @@ func (a *App) notify(title, body string) {
 		text += "\n" + html.EscapeString(body)
 	}
 	go func() {
+		defer func() {
+			if v := recover(); v != nil {
+				a.log("Telegram 通知协程异常（已隔离，不影响主服务）: %v", v)
+			}
+		}()
 		if err := a.sendTelegram(c, text); err != nil {
 			a.log("Telegram 通知失败: %v", err)
 		}

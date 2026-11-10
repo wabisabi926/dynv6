@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-var Version = "1.0.1"
+var Version = "1.0.2"
 
 func detectPaths() Paths {
 	cwd, _ := os.Getwd()
@@ -159,6 +159,37 @@ func loadOrCreateLocalToken(path string) (string, error) {
 
 func secureEqual(a, b string) bool {
 	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+// initSetupToken 服务模式（TCP 监听）首次启动生成一次性初始化令牌，防止
+// 未初始化实例被同网段其他人抢先创建管理员账号。本地回环与 Unix Socket 模式
+// 已由一次性本地令牌 / SO_PEERCRED 保护，不需要这一步。
+func (a *App) initSetupToken() {
+	if a.paths.Listen == "" || a.hasAdmin() || a.authBroken {
+		return
+	}
+	token := strings.TrimSpace(os.Getenv("DYNV6_SETUP_TOKEN"))
+	if token == "" {
+		buf := make([]byte, 24)
+		if _, err := rand.Read(buf); err != nil {
+			a.log("生成初始化令牌失败: %v", err)
+			return
+		}
+		token = hex.EncodeToString(buf)
+		path := filepath.Join(a.paths.Var, "setup-token")
+		if err := atomicWrite(path, []byte(token+"\n"), 0600); err != nil {
+			a.log("写入初始化令牌失败: %v", err)
+		}
+		a.log("首次初始化令牌（请在初始化页面输入，完成后自动删除）：%s", token)
+	} else {
+		a.log("已使用 DYNV6_SETUP_TOKEN 环境变量提供的初始化令牌（不在日志中显示）")
+	}
+	a.setupToken = token
+}
+
+func (a *App) clearSetupToken() {
+	a.setupToken = ""
+	_ = os.Remove(filepath.Join(a.paths.Var, "setup-token"))
 }
 
 func (a *App) localHostAllowed(r *http.Request) bool {
@@ -311,6 +342,8 @@ func main() {
 		a.log("配置读取失败: %v", err)
 	}
 	a.loadState()
+	// 异常退出可能残留 _acme-challenge TXT 记录，启动时异步对账清理
+	go a.cleanStaleTXT()
 	a.log("dynv6 %s 启动，配置=%s 数据=%s", Version, p.Config, p.Var)
 	if hint := vpnInterfaceHint(); hint != "" {
 		a.log("网络提示：检测到 %s；如果启用了 VPN/代理/出口节点，IP 探测可能得到出口 IP，而不是家庭宽带 IP", hint)
@@ -417,26 +450,33 @@ func writeErr(w http.ResponseWriter, code int, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": msg})
 }
 
+// isAdminQuiet 判断管理员权限。服务模式（TCP 监听）只认本地管理员会话：
+// 网关注入的 X-Trim-* 头仅用于展示用户名，绝不能作为权限依据（H-01）。
+// Unix Socket 模式由 SO_PEERCRED 限定连接进程，本地调试模式仅绑定回环。
 func (a *App) isAdminQuiet(r *http.Request) bool {
-	// 本地管理员会话、网关注入的管理员身份，或显式关闭鉴权且处于本地开发端口
-	if a.sessionValid(r) || a.gatewayAdmin(r) {
+	// Unix Socket 模式由 SO_PEERCRED 限定连接进程（paths.Socket 非空才算该模式）
+	if a.paths.Listen == "" && a.paths.DevPort == "" && a.paths.Socket != "" {
 		return true
 	}
-	return a.authDisabled && (a.paths.DevPort != "" || a.paths.Listen != "")
+	if a.paths.DevPort != "" && !a.localAuth {
+		return true
+	}
+	return a.sessionValid(r)
 }
 
 func (a *App) isAdmin(r *http.Request) bool {
 	if a.isAdminQuiet(r) {
 		return true
 	}
-	a.log("拒绝访问 %s：缺少网关注入的身份头 X-Trim-Username 或非管理员", r.URL.Path)
+	a.log("拒绝访问 %s：未登录管理员账号或会话已失效", r.URL.Path)
 	return false
 }
 
-// publicAPI 在服务模式下允许匿名访问：健康检查、鉴权状态与首次初始化/登录。
+// publicAPI 服务模式下允许匿名访问：健康检查、鉴权状态、初始化/登录，
+// 以及只返回概览级字段的 /api/status（供未登录界面提示登录）。
 func publicAPI(path string) bool {
 	switch path {
-	case "/api/health", "/api/auth/status", "/api/setup/status", "/api/setup/admin", "/api/auth/login":
+	case "/api/health", "/api/auth/status", "/api/setup/status", "/api/setup/admin", "/api/auth/login", "/api/status":
 		return true
 	}
 	return false
@@ -446,6 +486,9 @@ func (a *App) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
+		// 页面仍有内联事件/样式，script-src 允许 unsafe-inline；暂不设 frame-ancestors，
+		// 飞牛 App WebView / 网关可能以 iframe 嵌入，需真机确认来源后再收紧。
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'")
 		if a.localAuth && !a.localRequestAllowed(w, r) {
 			return
 		}
@@ -456,10 +499,10 @@ func (a *App) handler() http.Handler {
 		if path == "" {
 			path = "/"
 		}
-		// 服务模式（Docker / 反向代理）没有本地令牌：除健康检查与登录/初始化相关接口外，
-		// 其余 API 一律要求管理员会话，避免匿名读取配置或触发任务。
-		if a.paths.Listen != "" && !a.authDisabled && strings.HasPrefix(path, "/api/") && !publicAPI(path) {
-			if a.gatewayUser(r) == "" && !a.sessionValid(r) {
+		// 服务模式（Docker / 飞牛网关 / 反向代理）必须持有本地管理员会话；
+		// 网关注入的身份头不作为凭据，避免任何能直连端口的客户端伪造管理员。
+		if a.paths.Listen != "" && strings.HasPrefix(path, "/api/") && !publicAPI(path) {
+			if !a.sessionValid(r) {
 				writeErr(w, http.StatusUnauthorized, "请先登录管理员账号")
 				return
 			}
@@ -591,7 +634,6 @@ func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"admin":            true,
 		"gateway":          auth.Gateway,
 		"username":         auth.Username,
-		"auth_disabled":    auth.AuthDisabled,
 		"configured":       c.Domain != "" && c.Token != "",
 		"env":              runtimeEnv(),
 		"capabilities":     a.capabilities(),

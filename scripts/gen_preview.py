@@ -42,9 +42,8 @@ const DEMO_CONFIG = {
     domain:'example.dynv6.net', token:'__KEEP__',
     email:'me@example.com', wildcard:true, ca:'letsencrypt', key_length:'ec-256',
     dns_sleep:120, renew_days:30, ddns_interval_min:5, cert_check_hours:12,
-    enable_ipv4:true, enable_ipv6:false, ipv4_probe_url:'https://api.ipify.org',
-    ipv6_probe_url:'https://api6.ipify.org', ipv6_prefix:false,
-    acme_home:'${APPDATA}/acme', output_dir:'/vol1/1000/dynv6/certs',
+    enable_ipv4:true, enable_ipv6:false, ipv6_prefix:false,
+    acme_home:'${APPDATA}/acme', output_dir:'/app_data/dynv6/data/certs',
     backup_dir:'/vol1/1000/dynv6/backup', file_prefix:'${DOMAIN}',
     pfx_password:'', p12_password:'', file_mode:'0600',
     auto_ddns:true, auto_renew:true, auto_issue:false, allow_test_deploy:false,
@@ -78,7 +77,7 @@ const DEMO_LOGS = {ok:true, lines:[
 window.fetch = async function (url, opts) {
   const u = String(url);
   let data = {ok:true};
-  if (u.indexOf('api/auth/status') >= 0) data = {ok:true, authenticated:true, setupRequired:false, gateway:false, admin:true, username:'admin', authDisabled:false};
+  if (u.indexOf('api/auth/status') >= 0) data = {ok:true, authenticated:true, setupRequired:false, setupTokenRequired:false, gateway:false, admin:true, username:'admin'};
   else if (u.indexOf('api/status') >= 0) data = DEMO_STATUS;
   else if (u.indexOf('api/config') >= 0) data = (opts && opts.method === 'POST') ? {ok:true} : DEMO_CONFIG;
   else if (u.indexOf('api/files/get') >= 0) data = {ok:true};

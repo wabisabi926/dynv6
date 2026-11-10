@@ -16,7 +16,8 @@ func (a *App) convertAll(c Config) error {
 			return fmt.Errorf("缺少源文件 %s，请先签发或续期证书", f[k])
 		}
 	}
-	mode := parseMode(c.FileMode)
+	// PFX/P12 内含私钥，主输出固定 0600；分发到目标目录时由 deploy 单独放宽到 0644
+	mode := os.FileMode(0600)
 	if err := a.makePKCS12(c, f["key"], f["fullchain"], f["pfx"], c.PFXPassword, mode); err != nil {
 		return err
 	}

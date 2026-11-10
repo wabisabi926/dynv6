@@ -1,8 +1,17 @@
 #!/bin/bash
-# 升级后：目录权限收敛，服务由平台重新启动
+# 升级后：目录权限收敛，并重启服务以加载新二进制。
+# 注意：飞牛升级流程同样不会自动重启第三方应用，必须显式 restart；
+# 对未运行的旧实例 restart 也安全（stop 会清理遗留进程，start 拉起新版本）。
 set -u
 VAR="${TRIM_PKGVAR:-}"
 ETC="${TRIM_PKGETC:-}"
 [ -n "$VAR" ] && chmod 700 "$VAR" 2>/dev/null || true
 [ -n "$ETC" ] && chmod 700 "$ETC" 2>/dev/null || true
+
+MAIN="$(dirname "$0")/main"
+if [ -x "$MAIN" ]; then
+    if ! "$MAIN" restart; then
+        echo "dynv6 升级后自动重启失败，请查看应用日志或在应用中心手动启动" > "${TRIM_TEMP_LOGFILE:-/dev/stderr}"
+    fi
+fi
 exit 0
